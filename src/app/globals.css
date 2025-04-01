@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fix the excessive space issue across all pages */
+html, body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1 0 auto;
+}
+
+footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* Override min-height on pages */
+.min-h-screen {
+  min-height: 0 !important;
+}
+
+/* Reduce excessive bottom padding on containers */
+[class*="py-12"], [class*="pb-12"], [class*="mb-8"], [class*="mb-12"] {
+  padding-bottom: 1rem !important;
+  margin-bottom: 0 !important;
+}
+
+/* Notification styles for host pending requests */
+.host-pending-requests {
+  position: relative;
+}
+
+.host-pending-requests::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #4f46e5, #818cf8, #4f46e5);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+  z-index: 1;
+}
+
+/* Style for sessions hosted by the current user */
+.host-session::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #7e22ce, #a855f7, #7e22ce);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+  z-index: 1;
+}
+
+/* Style for joined sessions */
+.joined-session::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #059669, #34d399, #059669);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+  z-index: 1;
+}
+
+/* Style for pending approval */
+.pending-approval::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #d97706, #fbbf24, #d97706);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+  z-index: 1;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Add custom styles for react-datepicker to match dark theme */
+.react-datepicker {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: white !important;
+  font-family: inherit !important;
+}
+
+.react-datepicker__header {
+  background-color: #111827 !important;
+  border-bottom-color: #374151 !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker-time__header {
+  color: white !important;
+}
+
+.react-datepicker__day {
+  color: #d1d5db !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #4f46e5 !important;
+  color: white !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: #4f46e5 !important;
+  color: white !important;
+}
+
+.react-datepicker__day--disabled {
+  color: #6b7280 !important;
+  cursor: not-allowed !important;
+}
+
+.react-datepicker__triangle {
+  border-bottom-color: #111827 !important;
+}
+
+.react-datepicker__triangle::before {
+  border-bottom-color: #374151 !important;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: #d1d5db !important;
+}
+
+.react-datepicker__time-container {
+  border-left-color: #374151 !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time {
+  background-color: #1f2937 !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time-box {
+  width: 85px !important;
+}
+
+.react-datepicker__time-list-item {
+  color: #d1d5db !important;
+  background-color: #1f2937 !important;
+}
+
+.react-datepicker__time-list-item:hover {
+  background-color: #374151 !important;
+}
+
+.react-datepicker__time-list-item--selected {
+  background-color: #4f46e5 !important;
+  color: white !important;
+}
+
+.react-datepicker__time-list-item--disabled {
+  color: #6b7280 !important;
+}
+
+.react-datepicker-popper {
+  z-index: 40 !important;
+} 

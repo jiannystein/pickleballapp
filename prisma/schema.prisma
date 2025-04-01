@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String             @id @default(cuid())
+  email                String             @unique
+  password             String
+  name                 String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  avatarUrl            String?
+  phone                String?
+  isAdmin              Boolean            @default(false)
+  bio                  String?
+  rating               Float?             @default(0)
+  role                 String             @default("USER")
+  createdAnnouncements Announcement[]     @relation("CreatedBy")
+  joinRequests         JoinRequest[]
+  locationRequests     LocationRequest[]  @relation("LocationRequests")
+  notifications        Notification[]
+  receivedReviews      Review[]           @relation("ReviewReceiver")
+  sentReviews          Review[]           @relation("ReviewSender")
+  createdSessions      Session[]          @relation("SessionCreator")
+  uploadedPhotos       SessionPhoto[]
+  activities           UserActivity[]
+  announcements        UserAnnouncement[]
+  sessions             Session[]          @relation("SessionPlayers")
+}
+
+model Session {
+  id                String         @id @default(cuid())
+  title             String
+  description       String?
+  date              DateTime
+  maxPlayers        Int
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  creatorId         String
+  locationId        String
+  isPrivate         Boolean        @default(false)
+  status            String         @default("active")
+  contactInfo       String?
+  duration          Int            @default(60)
+  lookingForPlayers Boolean        @default(false)
+  lookingForTeams   Boolean        @default(false)
+  paymentMethod     String?
+  price             String?
+  joinRequests      JoinRequest[]
+  reviews           Review[]
+  creator           User           @relation("SessionCreator", fields: [creatorId], references: [id])
+  location          Location       @relation(fields: [locationId], references: [id])
+  photos            SessionPhoto[]
+  players           User[]         @relation("SessionPlayers")
+}
+
+model Location {
+  id           String    @id @default(cuid())
+  name         String
+  address      String
+  isApproved   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  instructions String?
+  photoUrl     String?
+  bookingUrl   String?
+  sessions     Session[]
+}
+
+model LocationRequest {
+  id           String   @id @default(cuid())
+  name         String
+  address      String
+  instructions String?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       String
+  requestedBy  User     @relation("LocationRequests", fields: [userId], references: [id])
+}
+
+model SessionPhoto {
+  id         String   @id @default(cuid())
+  photoUrl   String
+  caption    String?
+  sessionId  String
+  userId     String
+  createdAt  DateTime @default(now())
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [userId], references: [id])
+}
+
+model UserActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  activityType String
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model JoinRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  sessionId String
+  status    String   @default("pending")
+  message   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, sessionId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  linkUrl   String?
+  isRead    Boolean  @default(false)
+  sessionId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sessionId     String
+  reviewerId    String
+  revieweeId    String
+  comment       String?
+  communication Int
+  fairPlay      Int
+  overallRating Float
+  punctuality   Int
+  skillLevel    Int
+  sportsmanship Int
+  reviewee      User     @relation("ReviewReceiver", fields: [revieweeId], references: [id])
+  reviewer      User     @relation("ReviewSender", fields: [reviewerId], references: [id])
+  session       Session  @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, reviewerId, revieweeId])
+}
+
+model Announcement {
+  id                String             @id @default(cuid())
+  title             String
+  message           String
+  priority          String             @default("low")
+  createdAt         DateTime           @default(now())
+  expiresAt         DateTime?
+  isActive          Boolean            @default(true)
+  createdById       String
+  createdBy         User               @relation("CreatedBy", fields: [createdById], references: [id])
+  userAnnouncements UserAnnouncement[]
+
+  @@index([createdById])
+}
+
+model UserAnnouncement {
+  id             String       @id @default(cuid())
+  userId         String
+  announcementId String
+  dismissed      Boolean      @default(false)
+  dismissedAt    DateTime?
+  announcement   Announcement @relation(fields: [announcementId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, announcementId])
+  @@index([userId])
+  @@index([announcementId])
+}
+
+model SiteConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BugReport {
+  id             String    @id @default(cuid())
+  message        String
+  screenshot     String?
+  status         String    @default("pending")
+  userName       String?
+  userEmail      String?
+  userId         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  resolvedBy     String?
+  resolutionNote String?
+  resolvedAt     DateTime?
+}
