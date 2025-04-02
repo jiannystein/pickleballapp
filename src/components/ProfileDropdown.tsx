@@ -1,10 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import UserAvatar from './UserAvatar';
 
+// Debug flag to control logging
+const DEBUG = process.env.NODE_ENV === 'development' && false; // Set to true only when debugging
+
 interface User {
-  id?: string;  // Add id field to User interface
+  id?: string;
   name: string;
   email: string;
   avatarUrl?: string;
@@ -17,11 +20,16 @@ interface ProfileDropdownProps {
 
 export default function ProfileDropdown({ user }: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentAvatar, setCurrentAvatar] = useState<string | undefined>(user.avatarUrl);
-  const [userId, setUserId] = useState<string | undefined>(user.id);
-  const [avatarKey, setAvatarKey] = useState(Date.now());
+  const [avatarTimestamp, setAvatarTimestamp] = useState(() => Date.now());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // Memoize these values to avoid recreating them on every render
+  const memoizedUserProps = useMemo(() => ({
+    name: user.name,
+    imageUrl: user.avatarUrl,
+    userId: user.id
+  }), [user.name, user.avatarUrl, user.id]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -34,72 +42,31 @@ export default function ProfileDropdown({ user }: ProfileDropdownProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Update when user prop changes
+  // Update timestamp only when avatar URL changes
   useEffect(() => {
-    console.log('ProfileDropdown: User prop changed, updating avatar');
-    console.log('ProfileDropdown: New avatar URL:', user.avatarUrl);
-    setCurrentAvatar(user.avatarUrl);
-    setUserId(user.id);
-    setAvatarKey(Date.now());
-  }, [user.avatarUrl, user.id]);
-  
-  useEffect(() => {
-    // Listen for avatar changes
-    const handleAuthChanged = async () => {
-      console.log('ProfileDropdown: auth-state-changed event detected');
-      // Force avatar component to remount
-      setAvatarKey(Date.now());
-      
-      // Fetch the latest user data to ensure we have the current avatar URL
-      try {
-        const cacheBuster = Date.now();
-        const res = await fetch(`/api/auth/me?_=${cacheBuster}`, {
-          cache: 'no-store',
-          headers: {
-            'pragma': 'no-cache',
-            'cache-control': 'no-cache'
-          }
-        });
-        
-        if (res.ok) {
-          const userData = await res.json();
-          console.log('ProfileDropdown: Fetched updated user data', userData);
-          console.log('ProfileDropdown: New avatar URL from API:', userData.avatarUrl);
-          setCurrentAvatar(userData.avatarUrl);
-          setUserId(userData.userId);
-        }
-      } catch (err) {
-        console.error('ProfileDropdown: Failed to fetch updated user data', err);
-      }
-    };
-    
-    window.addEventListener('auth-state-changed', handleAuthChanged);
-    return () => {
-      window.removeEventListener('auth-state-changed', handleAuthChanged);
-    };
-  }, []);
+    if (DEBUG) console.log('ProfileDropdown: Avatar URL changed to:', user.avatarUrl);
+    setAvatarTimestamp(Date.now());
+  }, [user.avatarUrl]);
 
-  async function handleLogout() {
+  async function handleSignOut() {
     try {
-      const res = await fetch('/api/auth/logout', {
+      const res = await fetch('/api/auth/signout', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
-      
-      // Dispatch custom event to notify other components about logout
-      window.dispatchEvent(new Event('auth-state-changed'));
-      
-      if (res.redirected) {
-        // If the response is a redirect, follow it
-        window.location.href = res.url;
-      } else {
-        // For backward compatibility, redirect to home manually
+
+      if (res.ok) {
+        // Dispatch custom event for auth state change
+        window.dispatchEvent(new Event('auth-state-changed'));
+        
+        // Redirect to home page
         router.push('/');
+        router.refresh();
       }
     } catch (error) {
-      console.error('Error logging out:', error);
-      // Even if there's an error, dispatch event and redirect to home
-      window.dispatchEvent(new Event('auth-state-changed'));
-      router.push('/');
+      console.error('Error signing out:', error);
     }
   }
 
@@ -113,14 +80,14 @@ export default function ProfileDropdown({ user }: ProfileDropdownProps) {
       >
         <div className="relative flex items-center">
           <UserAvatar 
-            name={user.name} 
-            imageUrl={currentAvatar} 
+            name={memoizedUserProps.name}
+            imageUrl={memoizedUserProps.imageUrl} 
             size={36}
-            userId={userId}
-            showPlayerCard={!!userId}
+            userId={memoizedUserProps.userId}
+            showPlayerCard={!!memoizedUserProps.userId}
             playerCardPosition="bottom"
             playerCardTrigger="hover"
-            key={`avatar-${avatarKey}`} 
+            key={`avatar-${avatarTimestamp}`} 
           />
           <span className="text-gray-300 group-hover:text-indigo-400 font-light tracking-wide transition-colors ml-2 hidden md:inline-block">
             {user.name}
@@ -129,39 +96,28 @@ export default function ProfileDropdown({ user }: ProfileDropdownProps) {
       </button>
 
       {isOpen && (
-        <div 
-          className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl py-1 z-10 border border-gray-700 sm:origin-top-right"
-          role="menu"
-          aria-orientation="vertical"
-          aria-labelledby="user-menu-button"
-        >
+        <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
           <Link
             href="/profile"
-            className="block px-4 py-3 text-sm text-gray-300 hover:text-indigo-400 hover:bg-gray-700 font-light tracking-wide transition-colors"
-            role="menuitem"
+            className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
             onClick={() => setIsOpen(false)}
           >
-            Edit Profile
+            Your Profile
           </Link>
           {user.isAdmin && (
             <Link
               href="/admin"
-              className="block px-4 py-3 text-sm text-gray-300 hover:text-indigo-400 hover:bg-gray-700 font-light tracking-wide transition-colors"
-              role="menuitem"
+              className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
               onClick={() => setIsOpen(false)}
             >
               Admin Dashboard
             </Link>
           )}
           <button
-            onClick={() => {
-              setIsOpen(false);
-              handleLogout();
-            }}
-            className="block w-full text-left px-4 py-3 text-sm text-gray-300 hover:text-indigo-400 hover:bg-gray-700 font-light tracking-wide transition-colors"
-            role="menuitem"
+            onClick={handleSignOut}
+            className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
           >
-            Logout
+            Sign out
           </button>
         </div>
       )}

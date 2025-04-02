@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUser } from '@/lib/auth';
+import { initializeSessionReviews } from '@/lib/reviews';
 
 // PATCH - Update session status
 export async function PATCH(
@@ -67,6 +68,12 @@ export async function PATCH(
       where: { id: sessionId },
       data: { status }
     });
+
+    // If the session is being marked as completed, initialize reviews
+    if (status === 'completed') {
+      console.log(`Session ${sessionId} marked as completed, initializing reviews...`);
+      await initializeSessionReviews(sessionId);
+    }
 
     console.log('Session status updated successfully:', sessionId, status);
     return NextResponse.json({ 

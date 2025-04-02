@@ -89,4 +89,34 @@ export function createLocalISOString(date: Date): string {
   
   // Return ISO string
   return correctedDate.toISOString();
+}
+
+/**
+ * Checks if a session has ended based on its date and duration
+ * @param session Object containing date (string) and duration (minutes)
+ * @returns Boolean indicating if the session has ended
+ */
+export function isSessionEnded(session: any): boolean {
+  // Handle case where session is undefined or null
+  if (!session) return false;
+
+  // Get the date value (handling both string and Date objects)
+  let startTime: Date;
+  if (typeof session.date === 'string') {
+    startTime = new Date(session.date);
+  } else if (session.date instanceof Date) {
+    startTime = session.date;
+  } else {
+    console.error('Invalid date format in session:', session.date);
+    return false; // Return false if we can't determine the date
+  }
+
+  // Use default duration of 60 minutes if not specified
+  const durationMinutes = typeof session.duration === 'number' ? session.duration : 60;
+  
+  // Calculate end time by adding duration in milliseconds
+  const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+  
+  // Session has ended if end time is in the past
+  return endTime < new Date();
 } 

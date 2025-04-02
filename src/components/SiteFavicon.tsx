@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 
 export default function SiteFavicon() {
-  const [favicon, setFavicon] = useState<string>('/favicon.ico');
+  const [favicon, setFavicon] = useState<string>('/uploads/logo/default-favicon.ico');
 
   useEffect(() => {
     async function fetchFavicon() {

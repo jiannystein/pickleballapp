@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ProfileDropdown from './ProfileDropdown';
-import NotificationsMenu from './NotificationsMenu';
 import NotificationBadge from './NotificationBadge';
+import CombinedNotifications from './CombinedNotifications';
 import Image from 'next/image';
+import usePendingReviews from '@/lib/usePendingReviews';
 
 interface User {
   name: string;
@@ -23,42 +24,31 @@ interface SiteConfig {
   logo?: string;
 }
 
+// Create a debug flag to control logging
+const DEBUG = process.env.NODE_ENV === 'development' && false; // Set to true only when debugging
+
 export default function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
     siteName: 'PickleBall',
     tagline: 'Connect with fellow pickleball players and join sessions',
     primaryColor: '#4f46e5',
     secondaryColor: '#3b82f6'
   });
-
-  useEffect(() => {
-    fetchUser();
-    fetchSiteConfig();
-
-    window.addEventListener('auth-state-changed', fetchUser);
-    
-    return () => {
-      window.removeEventListener('auth-state-changed', fetchUser);
-    };
-  }, []);
-
-  // Fetch pending reviews when user is authenticated
-  useEffect(() => {
-    if (user) {
-      fetchPendingReviews();
-    } else {
-      setPendingReviewsCount(0);
-    }
-  }, [user]);
-
-  async function fetchUser() {
+  
+  // Use our custom hook for pending reviews
+  const { pendingReviewsCount } = usePendingReviews();
+  
+  // Use refs for stable event handlers
+  const authStateHandler = useRef<() => void>();
+  const isInitialMount = useRef(true);
+  
+  const fetchUser = useCallback(async () => {
     try {
-      console.log('Navigation: Fetching user data...');
+      if (DEBUG) console.log('Navigation: Fetching user data...');
       const cacheBuster = Date.now();
       const res = await fetch(`/api/auth/me?_=${cacheBuster}`, {
         cache: 'no-store',
@@ -69,16 +59,13 @@ export default function Navigation() {
         next: { revalidate: 0 }
       });
       const data = await res.json();
-      console.log('Navigation: API response status:', res.status);
-      console.log('Navigation: User data from API:', data);
-      console.log('Navigation: Avatar URL in response:', data.avatarUrl);
       
       if (res.ok) {
-        console.log('Navigation: Setting user with avatarUrl:', data.avatarUrl);
+        if (DEBUG) console.log('Navigation: Setting user with avatarUrl:', data.avatarUrl);
         setUser(data);
       } else {
         setUser(null);
-        console.log('Navigation: Clearing user due to error response');
+        if (DEBUG) console.log('Navigation: Clearing user due to error response');
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
@@ -86,9 +73,9 @@ export default function Navigation() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchSiteConfig() {
+  const fetchSiteConfig = useCallback(async () => {
     try {
       const res = await fetch('/api/site-config');
       if (res.ok) {
@@ -101,20 +88,35 @@ export default function Navigation() {
     } catch (error) {
       console.error('Error fetching site configuration:', error);
     }
-  }
+  }, []);
 
-  async function fetchPendingReviews() {
-    try {
-      const res = await fetch('/api/sessions/pending-reviews');
-      if (res.ok) {
-        const data = await res.json();
-        setPendingReviewsCount(data.totalPendingReviews);
-      }
-    } catch (error) {
-      console.error('Error fetching pending reviews:', error);
+  // Initialize event handlers only once
+  useEffect(() => {
+    // Create stable references to event handlers
+    authStateHandler.current = () => {
+      if (DEBUG) console.log('Auth state changed, fetching user');
+      fetchUser();
+    };
+  }, [fetchUser]);
+
+  // Setup once on initial mount
+  useEffect(() => {
+    fetchUser();
+    fetchSiteConfig();
+    
+    // Add event listeners (only on initial mount)
+    if (authStateHandler.current) {
+      window.addEventListener('auth-state-changed', authStateHandler.current);
     }
-  }
-
+    
+    // Cleanup on unmount
+    return () => {
+      if (authStateHandler.current) {
+        window.removeEventListener('auth-state-changed', authStateHandler.current);
+      }
+    };
+  }, []); // Empty dependency array = run once on mount
+  
   const brandColor = { color: siteConfig.primaryColor };
   const buttonStyle = { 
     backgroundColor: siteConfig.primaryColor 
@@ -140,6 +142,7 @@ export default function Navigation() {
                       src={siteConfig.logo} 
                       alt={siteConfig.siteName} 
                       fill 
+                      sizes="32px"
                       style={{objectFit: 'contain'}}
                       priority
                       unoptimized={siteConfig.logo.startsWith('http')}
@@ -151,7 +154,7 @@ export default function Navigation() {
                 siteConfig.siteName
               )}
             </Link>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <div className="hidden md:ml-6 md:flex md:space-x-8">
               {user ? (
                 <Link
                   href="/sessions"
@@ -210,14 +213,14 @@ export default function Navigation() {
           
           <div className="flex items-center">
             {user ? (
-              <div className="hidden sm:flex sm:items-center">
-                <NotificationsMenu />
+              <div className="hidden md:flex md:items-center">
+                <CombinedNotifications />
                 <div className="ml-3">
                   <ProfileDropdown user={user} />
                 </div>
               </div>
             ) : (
-              <div className="hidden sm:flex sm:space-x-4">
+              <div className="hidden md:flex md:space-x-4">
                 <Link
                   href="/auth/login"
                   className="text-gray-400 hover:text-gray-300 px-3 py-2 rounded-md text-sm font-medium"
@@ -235,10 +238,10 @@ export default function Navigation() {
             )}
             
             {/* Mobile menu button */}
-            <div className="flex items-center sm:hidden">
+            <div className="flex items-center md:hidden">
               {user && (
                 <div className="flex items-center">
-                  <NotificationsMenu />
+                  <CombinedNotifications />
                   <div className="ml-2">
                     <ProfileDropdown user={user} />
                   </div>
@@ -290,7 +293,7 @@ export default function Navigation() {
       </div>
 
       {/* Mobile menu, show/hide based on menu state */}
-      <div className={`${mobileMenuOpen ? 'block' : 'hidden'} sm:hidden`}>
+      <div className={`${mobileMenuOpen ? 'block' : 'hidden'} md:hidden`}>
         <div className="px-2 pt-2 pb-3 space-y-1 border-t border-gray-700">
           {user ? (
             <>

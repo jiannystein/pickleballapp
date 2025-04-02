@@ -21,6 +21,21 @@ footer {
   margin-top: auto;
 }
 
+/* Consistent container padding across the application */
+.max-w-7xl {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Ensure consistent padding on all pages */
+@media (max-width: 640px) {
+  .min-h-screen {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
 /* Override min-height on pages */
 .min-h-screen {
   min-height: 0 !important;

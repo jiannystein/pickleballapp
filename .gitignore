@@ -27,6 +27,8 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.development
+.env.production
 
 # vercel
 .vercel
@@ -36,4 +38,23 @@ yarn-error.log*
 next-env.d.ts
 
 # custom
-/public/uploads 
+/public/uploads
+
+# database
+*.sqlite
+*.sqlite3
+*.db
+
+# utility scripts with sensitive info
+reset-db.bat
+updateAdminFlag.js
+createAdminUser.js
+*-db.bat
+start-dev.bat
+
+# logs
+*.log
+
+# sensitive files
+src/lib/env.ts
+src/lib/init-admin.ts 

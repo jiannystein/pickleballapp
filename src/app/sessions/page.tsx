@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { formatDate, formatTime } from '@/lib/dateUtils';
+import { formatDate, formatTime, isSessionEnded } from '@/lib/dateUtils';
 import UserAvatar from '@/components/UserAvatar';
+import useSessionsRefresh from '@/lib/useSessionsRefresh';
+import RefreshInfo from '@/components/RefreshInfo';
+import { useMessagePortErrorSuppression } from '@/lib/useMessagePortErrorSuppression';
 
 interface Location {
   id: string;
@@ -49,6 +52,7 @@ interface Session {
   status?: string;
   isPrivate: boolean;
   pendingRequestsCount?: number;
+  duration: number;
 }
 
 interface ConfirmDialogProps {
@@ -115,11 +119,23 @@ const PortalWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 export default function Sessions() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // Use the custom hook to suppress message port closed errors
+  useMessagePortErrorSuppression();
+  
+  const { 
+    sessions, 
+    loading, 
+    error: sessionsError, 
+    refreshSessions,
+    lastRefreshTime 
+  } = useSessionsRefresh({
+    refreshInterval: 15000, // Refresh every 15 seconds
+    initialFetch: true,
+  });
+
   const [filteredSessions, setFilteredSessions] = useState<Session[]>([]);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sessionJoinRequests, setSessionJoinRequests] = useState<Record<string, JoinRequest>>({});
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed' | 'cancelled'>('all');
@@ -152,24 +168,40 @@ export default function Sessions() {
     action: 'join'
   });
 
+  // Helper function to check if a session has ended (including duration)
+  // Made more generic to handle different Session interfaces in the codebase
+  const isSessionEnded = useCallback((session: { date: string, duration?: number }) => {
+    const startTime = new Date(session.date);
+    // Add fallback for undefined duration (default to 60 minutes)
+    const duration = typeof session.duration === 'number' ? session.duration : 60; 
+    const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
+    return endTime < new Date();
+  }, []);
+
   // New function to filter sessions by status
   const getFilteredSessionsByStatus = () => {
     if (!filteredSessions || filteredSessions.length === 0) return [];
     
     const now = new Date();
     
-    // Only show active sessions
+    // Only show active sessions that haven't ended yet
     return filteredSessions.filter(session => 
       session.status !== 'cancelled' && 
       session.status !== 'completed' && 
-      new Date(session.date) > now
+      !isSessionEnded(session)
     );
   };
 
   useEffect(() => {
     fetchCurrentUser();
-    fetchSessions();
   }, []);
+
+  // Update error state from the hook
+  useEffect(() => {
+    if (sessionsError) {
+      setError(sessionsError);
+    }
+  }, [sessionsError]);
 
   useEffect(() => {
     if (sessions.length > 0 && locationId) {
@@ -203,23 +235,6 @@ export default function Sessions() {
       }
     } catch (err) {
       console.error('Error fetching user:', err);
-    }
-  }
-
-  async function fetchSessions() {
-    try {
-      const res = await fetch('/api/sessions');
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to fetch sessions');
-      }
-
-      setSessions(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -329,7 +344,7 @@ export default function Sessions() {
       }
 
       // Refresh sessions list
-      fetchSessions();
+      refreshSessions();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
@@ -347,7 +362,7 @@ export default function Sessions() {
       }
 
       // Refresh sessions list
-      fetchSessions();
+      refreshSessions();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
@@ -375,7 +390,7 @@ export default function Sessions() {
       setError('');
       
       // Refresh sessions and join requests
-      fetchSessions();
+      refreshSessions();
       
       // Show temporary success message
       setError(`Your join request has been canceled successfully.`);
@@ -437,7 +452,7 @@ export default function Sessions() {
       setShowJoinRequestModal(false);
       
       // Refresh sessions and join requests
-      fetchSessions();
+      refreshSessions();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     }
@@ -560,11 +575,14 @@ export default function Sessions() {
     if (session.status === 'cancelled') {
       cardOverlayClass = "opacity-70";
       cardBorderClass = "border border-red-800 relative";
-    } else if (new Date(session.date) < new Date()) {
+    } else if (isSessionEnded(session)) {
       cardOverlayClass = "opacity-70";
       cardBorderClass = "border border-gray-600 relative";
     }
     
+    // Check session status for display
+    const hasEnded = isSessionEnded(session);
+
     return (
       <div 
         key={session.id} 
@@ -644,7 +662,7 @@ export default function Sessions() {
                   Cancelled
                 </span>
               )}
-              {new Date(session.date) < new Date() && session.status !== 'cancelled' && (
+              {hasEnded && session.status !== 'cancelled' && (
                 <span className="bg-yellow-700 text-yellow-100 text-xs px-2 py-1 rounded">
                   Completed
                 </span>
@@ -740,18 +758,18 @@ export default function Sessions() {
             {isCreatedByUser(session) ? (
               <div className="flex items-center justify-center">
                 <Link
-                  href={session.status === 'cancelled' || new Date(session.date) < new Date() 
+                  href={session.status === 'cancelled' || hasEnded 
                     ? `/sessions/${session.id}` 
                     : `/sessions/${session.id}/edit`}
                   className={`flex-1 py-2 px-4 text-center rounded-md ${
-                    session.status === 'cancelled' || new Date(session.date) < new Date()
+                    session.status === 'cancelled' || hasEnded
                       ? 'bg-gray-700 text-gray-400 cursor-pointer'
                       : 'bg-indigo-600 text-white hover:bg-indigo-700'
                   }`}
                 >
                   {session.status === 'cancelled' 
                     ? 'Cancelled' 
-                    : new Date(session.date) < new Date()
+                    : hasEnded
                     ? 'Completed'
                     : 'Edit Session'}
                 </Link>
@@ -766,7 +784,7 @@ export default function Sessions() {
                     Cancelled
                   </button>
                 </div>
-              ) : new Date(session.date) < new Date() ? (
+              ) : hasEnded ? (
                 <div className="flex items-center justify-center">
                   <button
                     disabled={true}
@@ -788,22 +806,34 @@ export default function Sessions() {
                       confirmJoinSession(session.id);
                     }
                   }}
-                  disabled={((session.players.length + 1) >= session.maxPlayers && !hasUserJoined(session)) ||
-                          (session.isPrivate && 
-                            (getJoinRequestStatus(session.id) === 'pending' || 
-                            getJoinRequestStatus(session.id) === 'rejected' ||
-                            sessionJoinRequests[session.id]?.isExpired))}
+                  disabled={
+                    // DO NOT disable if user has joined and needs to leave
+                    (hasUserJoined(session)) ? false :
+                    // If session is full and user hasn't joined, disable button
+                    ((session.players.length + 1) >= session.maxPlayers) ||
+                    // If session is private with pending/rejected/expired request, disable button
+                    (session.isPrivate && 
+                      (getJoinRequestStatus(session.id) === 'pending' || 
+                       getJoinRequestStatus(session.id) === 'rejected' ||
+                       sessionJoinRequests[session.id]?.isExpired))
+                  }
                   className={`w-full py-2 px-4 rounded-md font-medium transition-colors ${
-                    (session.players.length + 1) >= session.maxPlayers && !hasUserJoined(session)
+                    // User has joined the session - red Leave button (always enabled)
+                    hasUserJoined(session) 
+                    ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                    // Session is full and user hasn't joined
+                    : (session.players.length + 1) >= session.maxPlayers
                     ? 'bg-gray-600 cursor-not-allowed text-gray-300'
+                    // Session is private and request has expired
                     : session.isPrivate && sessionJoinRequests[session.id]?.isExpired
                     ? 'bg-gray-700 cursor-not-allowed text-gray-400'
+                    // Session is private and request is pending
                     : session.isPrivate && getJoinRequestStatus(session.id) === 'pending'
                     ? 'bg-yellow-600 cursor-not-allowed text-white'
+                    // Session is private and request was rejected
                     : session.isPrivate && getJoinRequestStatus(session.id) === 'rejected'
                     ? 'bg-red-600 cursor-not-allowed text-white'
-                    : hasUserJoined(session)
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    // Default join button (green)
                     : 'bg-green-600 hover:bg-green-700 text-white'
                   }`}
                 >
@@ -852,46 +882,75 @@ export default function Sessions() {
   return (
     <>
       <div id="player-card-portal" className="fixed inset-0 pointer-events-none z-[9999]" />
-    <div className="min-h-screen bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
-              {locationName ? `Sessions at ${locationName}` : 'Available Sessions'}
-            </h1>
-          <Link
-            href="/sessions/create"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-          >
-            Create Session
-          </Link>
-        </div>
-
-        {error && (
-            <div className="bg-red-900 border border-red-700 text-white px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
-
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="min-h-screen bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="py-8">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold text-white">
+                {locationName ? `Sessions at ${locationName}` : 'All Sessions'}
+              </h1>
+              
+              <div className="flex space-x-4 items-center">
+                {locationName && (
+                  <button
+                    onClick={clearLocationFilter}
+                    className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    All Locations
+                  </button>
+                )}
+                
+                <Link
+                  href="/sessions/create"
+                  className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 flex items-center"
+                >
+                  <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Create Session
+                </Link>
+              </div>
             </div>
-          ) : getFilteredSessionsByStatus().length === 0 ? (
-            <div className="text-center py-12 bg-gray-800 rounded-lg">
-              <svg className="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p className="mt-4 text-gray-400 text-lg">
-                No active sessions available.
-              </p>
+            
+            {/* Add this refresh information section */}
+            <RefreshInfo 
+              lastRefreshTime={lastRefreshTime}
+              onRefresh={refreshSessions}
+              refreshInterval={15}
+            />
+
+            {/* Display error message if any */}
+            {error && (
+              <div className="bg-red-900 border border-red-700 text-white px-4 py-3 rounded mb-6">
+                {error}
+              </div>
+            )}
+            
+            {/* Rest of your sessions display code */}
+            {loading ? (
+              <div className="flex justify-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+              </div>
+            ) : getFilteredSessionsByStatus().length === 0 ? (
+              <div className="text-center py-12 bg-gray-800 rounded-lg">
+                <svg className="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="mt-4 text-gray-400 text-lg">
+                  No active sessions available.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {getFilteredSessionsByStatus().map((session) => renderSessionCard(session))}
+              </div>
+            )}
           </div>
-        ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {getFilteredSessionsByStatus().map((session) => renderSessionCard(session))}
-                  </div>
-                      )}
-                    </div>
-                  </div>
+        </div>
+      </div>
 
       {/* Join Request Modal */}
       {showJoinRequestModal && (
@@ -917,7 +976,7 @@ export default function Sessions() {
                 placeholder="Introduce yourself or include any relevant information for the host..."
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
-                      </div>
+            </div>
 
             <div className="flex justify-end space-x-3">
               <button
@@ -932,9 +991,9 @@ export default function Sessions() {
               >
                 Send Request
               </button>
-                        </div>
-                    </div>
-                  </div>
+            </div>
+          </div>
+        </div>
       )}
       
       {/* Confirmation dialog */}
@@ -954,16 +1013,16 @@ export default function Sessions() {
               >
                 Cancel
               </button>
-                      <button
+              <button
                 onClick={handleConfirmAction}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
               >
                 {confirmDialog.confirmText}
-                      </button>
-                  </div>
-                </div>
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
     </>
   );
 }

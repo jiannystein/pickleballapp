@@ -64,6 +64,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [initializingReviews, setInitializingReviews] = useState(false);
+  const [initializeResult, setInitializeResult] = useState<any>(null);
   const router = useRouter();
 
   const refreshData = async () => {
@@ -137,6 +139,32 @@ export default function AdminDashboard() {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   }
+
+  // Add function to initialize reviews
+  const initializeReviews = async () => {
+    try {
+      setInitializingReviews(true);
+      setInitializeResult(null);
+      
+      const response = await fetch('/api/tasks/initialize-reviews', {
+        method: 'POST',
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to initialize reviews');
+      }
+      
+      console.log('Reviews initialization result:', result);
+      setInitializeResult(result);
+    } catch (error) {
+      console.error('Error initializing reviews:', error);
+      setInitializeResult({ error: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setInitializingReviews(false);
+    }
+  };
 
   if (loading) {
   return (
@@ -320,6 +348,70 @@ export default function AdminDashboard() {
               </svg>
                         </Link>
           </div>
+        </div>
+      </div>
+      
+      {/* Admin Tools Section */}
+      <div className="bg-gray-800 rounded-xl shadow-lg p-6 mt-8">
+        <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+          <svg className="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+          </svg>
+          Admin Tools
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div className="bg-gray-750 p-4 rounded-lg">
+            <h3 className="text-lg font-medium text-white mb-2">Initialize Pending Reviews</h3>
+            <p className="text-gray-300 text-sm mb-4">
+              Recalculate and initialize pending review states for all completed sessions. 
+              This ensures users see the correct "Rate Players" buttons for sessions that need ratings.
+            </p>
+            
+            <button
+              onClick={initializeReviews}
+              disabled={initializingReviews}
+              className={`px-4 py-2 rounded-md text-white ${
+                initializingReviews 
+                  ? 'bg-gray-600 cursor-not-allowed' 
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+            >
+              {initializingReviews ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+              ) : (
+                'Initialize Reviews'
+              )}
+            </button>
+            
+            {initializeResult && (
+              <div className={`mt-4 p-3 rounded-md ${
+                initializeResult.error 
+                  ? 'bg-red-900/50 border border-red-700 text-red-200' 
+                  : 'bg-green-900/50 border border-green-700 text-green-200'
+              }`}>
+                {initializeResult.error ? (
+                  <p>Error: {initializeResult.error}</p>
+                ) : (
+                  <div>
+                    <p className="font-medium">{initializeResult.message}</p>
+                    <p className="text-sm mt-1">
+                      Sessions processed: {initializeResult.sessionsProcessed}, 
+                      Success: {initializeResult.successCount}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Add more admin tools here in the future */}
         </div>
       </div>
       

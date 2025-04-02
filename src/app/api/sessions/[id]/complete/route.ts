@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { getUser } from '@/lib/auth';
 import { notifySessionCompletion } from '@/lib/notifications';
 import { logUserActivity, ActivityType } from '@/lib/activity';
+import { initializeSessionReviews } from '@/lib/reviews';
 
 // PATCH - Mark a session as completed
 export async function PATCH(
@@ -65,6 +66,10 @@ export async function PATCH(
         status: 'completed'
       }
     });
+
+    // Initialize pending reviews for all participants
+    console.log(`Session ${sessionId} marked as completed, initializing reviews for all participants...`);
+    await initializeSessionReviews(sessionId);
 
     // Log the complete session activity
     await logUserActivity(user.userId, ActivityType.COMPLETE_SESSION, request);

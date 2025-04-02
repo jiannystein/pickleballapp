@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { formatDate, formatTime, formatDateTime } from '@/lib/dateUtils';
+import { formatDate, formatTime, formatDateTime, isSessionEnded } from '@/lib/dateUtils';
 import { useSession } from 'next-auth/react';
 import NotificationBadge from '@/components/NotificationBadge';
 import RatePlayersModal from '@/components/RatePlayersModal';
 import { FaCalendarAlt, FaClock, FaMapMarkerAlt, FaUsers, FaDollarSign, FaCamera, FaTrash } from 'react-icons/fa';
 import UserAvatar from '@/components/UserAvatar';
 import { PiConfettiFill } from 'react-icons/pi';
+import toast from 'react-hot-toast';
 
 interface User {
   id: string;
@@ -124,16 +125,46 @@ export default function SessionDetail() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       // Check if URL has #rate-players
-      if (window.location.hash === '#rate-players' && ratePlayersRef.current) {
-        // Scroll to the rate players section
-        ratePlayersRef.current.scrollIntoView({ behavior: 'smooth' });
-        // Open the rate players modal
-        setTimeout(() => {
-          openRatePlayersModal();
-        }, 500);
+      if (window.location.hash === '#rate-players') {
+        // Check if there are pending reviews
+        if (pendingReviews?.allReviewsComplete || pendingReviews?.pendingReviewsCount === 0) {
+          // If no pending reviews, replace the URL without the hash
+          window.history.replaceState(null, '', window.location.pathname);
+          // Still show a quick message to user
+          setIsRatePlayersModalOpen(true);
+          setTimeout(() => {
+            setIsRatePlayersModalOpen(false);
+          }, 2000); // Close after 2 seconds
+        } else if (ratePlayersRef.current) {
+          // If there are pending reviews, scroll to the section and open the modal
+          ratePlayersRef.current.scrollIntoView({ behavior: 'smooth' });
+          // Open the rate players modal
+          setTimeout(() => {
+            openRatePlayersModal();
+          }, 500);
+        }
+      }
+      // If there are pending reviews and the session is complete, automatically show rating UI
+      else if (session?.status === 'completed' && pendingReviews && 
+              pendingReviews.pendingReviewsCount > 0 && 
+              !isRatePlayersModalOpen) {
+        // Check if this is the first time viewing (using a session storage flag)
+        const hasSeenRatingPrompt = sessionStorage.getItem(`seen-rating-prompt-${session.id}`);
+        if (!hasSeenRatingPrompt) {
+          // Set the flag so we don't keep showing the prompt on every visit
+          sessionStorage.setItem(`seen-rating-prompt-${session.id}`, 'true');
+          // Scroll to the rate players section
+          if (ratePlayersRef.current) {
+            ratePlayersRef.current.scrollIntoView({ behavior: 'smooth' });
+            // Open the rate players modal after a short delay
+            setTimeout(() => {
+              openRatePlayersModal();
+            }, 1000);
+          }
+        }
       }
     }
-  }, [session, pendingReviews]);
+  }, [session, pendingReviews, isRatePlayersModalOpen]);
 
   // Add useEffect to fetch pending reviews when session is loaded
   useEffect(() => {
@@ -218,38 +249,33 @@ export default function SessionDetail() {
   async function markSessionAsCompleted() {
     try {
       if (!session) return;
-
-      setSuccessMessage('Updating session status...');
-      console.log('Making API call to mark session as completed');
       
-      // First, try to use the update-status endpoint
-      let response = await fetch(`/api/sessions/update-status`, {
-        method: 'POST',
+      console.log('Manually marking session as completed:', session.id);
+      
+      const res = await fetch(`/api/sessions/${session.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'completed' }),
       });
       
-      // If that fails, try the direct session status endpoint
-      if (!response.ok) {
-        response = await fetch(`/api/sessions/${session.id}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ status: 'completed' }),
-        });
+      if (!res.ok) {
+        throw new Error('Failed to update session status');
       }
-
-      if (response.ok) {
-        console.log('Session marked as completed successfully');
-        // Update local session state
-        setSession(prev => prev ? { ...prev, status: 'completed' } : null);
-        setSuccessMessage('Session status updated to completed!');
-        setTimeout(() => setSuccessMessage(null), 3000);
-      } else {
-        const error = await response.json();
-        console.error('Failed to mark session as completed:', error);
-        setErrorMessage('Failed to update session status');
-        setTimeout(() => setErrorMessage(null), 3000);
-      }
+      
+      // Update local session state
+      setSession({
+        ...session,
+        status: 'completed'
+      });
+      
+      // Show success message
+      setSuccessMessage('Session marked as completed');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+      // Refresh session data to get latest status
+      fetchSession();
     } catch (err) {
       console.error('Error marking session as completed:', err);
       setErrorMessage('Error updating session status');
@@ -257,22 +283,28 @@ export default function SessionDetail() {
     }
   }
 
+  // Check if session is past start time
+  const isPastSessionStart = useCallback((session: Session | null) => {
+    if (!session) return false;
+    return new Date(session.date) < new Date();
+  }, []);
+
   // Add this effect to automatically mark past sessions as completed
   useEffect(() => {
     const checkSessionStatus = async () => {
       if (session && !isLoading) {
-        const sessionDate = new Date(session.date);
-        const isPast = sessionDate < new Date();
+        // Check if the session has ended (not just started)
+        const isEnded = isSessionEnded(session);
         
-        if (isPast && session.status !== 'cancelled' && session.status !== 'completed') {
-          console.log('Marking past session as completed:', session.id);
+        if (isEnded && session.status !== 'cancelled' && session.status !== 'completed') {
+          console.log('Marking ended session as completed:', session.id);
           await markSessionAsCompleted();
         }
       }
     };
     
     checkSessionStatus();
-  }, [session, isLoading]);
+  }, [session, isLoading, markSessionAsCompleted]);
 
   async function fetchJoinRequests() {
     if (!session) return;
@@ -725,11 +757,11 @@ export default function SessionDetail() {
   const checkAndUpdateSessionStatus = useCallback(async () => {
     if (!session) return;
     
-    const now = new Date();
-    const sessionDate = new Date(session.date);
+    // Check if the session has ended (based on end time)
+    const isEnded = isSessionEnded(session);
     
-    // If session is in the past and not marked as completed or cancelled, update it
-    if (sessionDate < now && session.status !== 'completed' && session.status !== 'cancelled') {
+    // If session has ended and not marked as completed or cancelled, update it
+    if (isEnded && session.status !== 'completed' && session.status !== 'cancelled') {
       try {
         setIsLoading(true);
         
@@ -748,7 +780,7 @@ export default function SessionDetail() {
         setIsLoading(false);
       }
     }
-  }, [session, fetchSession]);
+  }, [session, fetchSession, isSessionEnded]);
   
   // Check session status on component mount
   useEffect(() => {
@@ -885,6 +917,24 @@ export default function SessionDetail() {
     return new Set(pendingReviews?.pendingReviewPlayers?.map(player => player.id) || []);
   }, [pendingReviews]);
 
+  // Replace references to isPastSession with isSessionEnded
+  const isPastSession = isSessionEnded(session);
+
+  // Format date and time for display
+  const formatDateTime = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      time: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    };
+  }, []);
+
+  // Get session date/time information
+  const { date, time } = formatDateTime(session?.date || '');
+  
+  // Use the enhanced isSessionEnded logic instead of simple date comparison
+  // const isPastSession = sessionDate < new Date();
+
   // Enhanced loading state
   if (isLoading) {
     return (
@@ -912,10 +962,10 @@ export default function SessionDetail() {
           </div>
           <div className="text-center mt-6">
             <Link 
-              href="/sessions" 
+              href="/my-sessions?tab=completed" 
               className="text-indigo-400 hover:text-indigo-300"
             >
-              Back to Sessions
+              Back to My Sessions
             </Link>
           </div>
         </div>
@@ -930,20 +980,16 @@ export default function SessionDetail() {
           <div className="text-center text-white">Session not found</div>
           <div className="text-center mt-6">
             <Link 
-              href="/sessions" 
+              href="/my-sessions?tab=completed" 
               className="text-indigo-400 hover:text-indigo-300"
             >
-              Back to Sessions
+              Back to My Sessions
             </Link>
           </div>
         </div>
       </div>
     );
   }
-
-  const { date, time } = formatDateTime(session.date);
-  const sessionDate = new Date(session.date);
-  const isPastSession = sessionDate < new Date();
 
   function renderJoinRequestsSection() {
     if (!session || !isCreatedByUser() || joinRequests.length === 0) {
@@ -1000,9 +1046,9 @@ export default function SessionDetail() {
                   </p>
                   {request.message && (
                     <p className="text-sm text-gray-300 mt-2 italic">"{request.message}"</p>
-                  )}
-              </div>
-            </div>
+                    )}
+                  </div>
+                </div>
 
               <div className="flex space-x-2">
                 <button
@@ -1041,7 +1087,7 @@ export default function SessionDetail() {
             <div className="flex items-center text-yellow-300 mb-2">
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                    </svg>
               <span className="font-medium">Private Session Information</span>
                   </div>
             <p className="text-gray-300 text-sm">
@@ -1085,16 +1131,17 @@ export default function SessionDetail() {
   // Find and replace the renderRatePlayersButton function
   const renderRatePlayersButton = () => {
     if (!session) return null;
-    
+     
     // Only show rate players button if user has joined and session is completed
     const userHasJoined = 
       (currentUserId && session.creator?.id === currentUserId) || 
       (currentUserId && session.players?.some(player => player.id === currentUserId));
-    
+     
     if (!userHasJoined || session.status !== 'completed') return null;
     
-    const allPlayersRated = pendingReviews?.allReviewsComplete === true;
+    // Add a ref to the rate players section
     const pendingCount = pendingReviews?.pendingReviewsCount || 0;
+    const allPlayersRated = pendingReviews?.allReviewsComplete || false;
     
     return (
       <div id="rate-players-section" ref={ratePlayersRef} className="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700 p-6 mb-8">
@@ -1128,13 +1175,17 @@ export default function SessionDetail() {
             <div className="flex justify-end">
               <button
                 onClick={() => setIsRatePlayersModalOpen(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                className="relative bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2 group"
               >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {pendingCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-yellow-500 text-xs font-bold text-white animate-pulse">
+                    {pendingCount}
+                  </span>
+                )}
+                <svg className="w-5 h-5 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                 </svg>
-                Rate Players
-                {pendingCount > 0 && <span className="ml-1 px-2 py-0.5 bg-yellow-500 text-xs font-bold rounded-full">{pendingCount}</span>}
+                <span className="animate-pulse">Rate Players</span>
               </button>
             </div>
           </div>
@@ -1179,8 +1230,8 @@ export default function SessionDetail() {
                     <span className="ml-2 text-xs bg-green-900 text-green-200 px-2 py-0.5 rounded">You</span>
                   )}
                 </div>
+                </div>
               </div>
-            </div>
             {isCompleted && session.creator.id !== currentUserId && (
               <button
                 onClick={() => {
@@ -1197,8 +1248,8 @@ export default function SessionDetail() {
                 {pendingReviewIds.has(session.creator.id) ? "Rate" : "Rated"}
               </button>
             )}
-          </div>
-          
+            </div>
+
           {/* Players */}
           {session.players.map(player => (
             <div key={player.id} className="flex items-center justify-between">
@@ -1212,7 +1263,7 @@ export default function SessionDetail() {
                     size={40}
                     playerCardTrigger="hover"
                   />
-                </div>
+              </div>
                 <div>
                   <div className="text-white font-medium flex items-center">
                     {player.name}
@@ -1256,8 +1307,8 @@ export default function SessionDetail() {
               <FaCalendarAlt className="text-indigo-400 mt-1 mr-3 flex-shrink-0" />
                     <div>
                 <p className="text-white text-sm sm:text-base">{formatDate(session.date)}</p>
-                    </div>
-            </div>
+                  </div>
+                  </div>
             <div className="flex items-start">
               <FaClock className="text-indigo-400 mt-1 mr-3 flex-shrink-0" />
                     <div>
@@ -1295,8 +1346,8 @@ export default function SessionDetail() {
                     <p className="text-gray-400 text-xs sm:text-sm">Payment: {session.paymentMethod}</p>
                   )}
                 </div>
-              </div>
-            )}
+                    </div>
+                  )}
             {session.contactInfo && (
               <div className="flex items-start">
                 <svg className="w-4 h-4 text-indigo-400 mt-1 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1305,7 +1356,7 @@ export default function SessionDetail() {
                 <div>
                   <p className="text-white text-sm sm:text-base break-words">{session.contactInfo}</p>
                 </div>
-                      </div>
+              </div>
                     )}
                   </div>
         </div>
@@ -1320,9 +1371,9 @@ export default function SessionDetail() {
           <div className="bg-red-900/30 border border-red-700 text-white px-4 py-3 rounded-lg mb-6 flex items-center">
             <svg className="w-5 h-5 mr-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+                  </svg>
             {errorMessage}
-          </div>
+                    </div>
         )}
         
         {successMessage && (
@@ -1331,18 +1382,18 @@ export default function SessionDetail() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             {successMessage}
-          </div>
-        )}
+                  </div>
+                )}
         
         {renderFeedbackBanner()}
         
         {/* Breadcrumb navigation */}
         <div className="mb-4 sm:mb-6 flex text-sm text-gray-400">
-          <Link href="/sessions" className="hover:text-blue-400 transition flex items-center">
+          <Link href="/my-sessions?tab=completed" className="hover:text-blue-400 transition flex items-center">
             <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
             </svg>
-            Sessions
+            Back to My Sessions
           </Link>
           <span className="mx-2">/</span>
           <span className="text-gray-200 truncate font-medium">{session.title}</span>
@@ -1371,8 +1422,8 @@ export default function SessionDetail() {
             {session.description && (
               <div className="mt-4 text-gray-300 text-sm sm:text-base bg-gray-800/50 p-4 rounded-lg border-l-4 border-indigo-500">
                 {session.description}
-              </div>
-            )}
+                    </div>
+                  )}
             
             {/* Host info */}
             <div className="mt-6 flex items-center bg-gray-800/40 p-4 rounded-lg">
@@ -1386,9 +1437,9 @@ export default function SessionDetail() {
                 ) : (
                   <div className="text-lg sm:text-xl text-gray-300 font-semibold">
                     {session.creator.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
               <div className="ml-4">
                 <div className="flex items-center">
                   <p className="text-white text-base sm:text-lg font-medium">Hosted by {session.creator.name}</p>
@@ -1397,7 +1448,7 @@ export default function SessionDetail() {
                 <p className="text-gray-400 text-xs sm:text-sm">{session.creator.email}</p>
               </div>
             </div>
-            
+
             {/* Session details and additional info */}
             {renderSessionInfo()}
 
@@ -1413,7 +1464,7 @@ export default function SessionDetail() {
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
+                  </svg>
                       Edit Session
                     </Link>
                   )}
@@ -1456,7 +1507,7 @@ export default function SessionDetail() {
                           </svg>
                           Upload
                         </Link>
-                      </div>
+              </div>
                     ) : userJoinRequest && userJoinRequest.status === 'pending' ? (
                       <div className="w-full space-y-3">
                         <button
@@ -1526,11 +1577,11 @@ export default function SessionDetail() {
               <div className="p-6">
                 <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
           Players <span className="ml-2 text-sm text-gray-400">({session.players.length}/{session.maxPlayers})</span>
-        </h3>
-        
+              </h3>
+
         <div className="space-y-5">
           {/* Host */}
           <div className="flex items-center justify-between bg-gray-750/50 p-3 rounded-lg">
@@ -1563,7 +1614,7 @@ export default function SessionDetail() {
                 }}
                 className={`text-xs px-3 py-1.5 rounded-md ${
                   pendingReviewIds.has(session.creator.id) 
-                    ? "bg-indigo-600 hover:bg-indigo-700 text-white font-medium" 
+                    ? "bg-red-600 hover:bg-red-700 text-white font-medium" 
                     : "bg-gray-700 text-gray-300"
                 } flex items-center transition-colors`}
                 disabled={!pendingReviewIds.has(session.creator.id)}
@@ -1573,7 +1624,7 @@ export default function SessionDetail() {
                     <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                     </svg>
-                    Rate
+                    <span className="animate-pulse">Rate</span>
                   </>
                 ) : (
                   <>
@@ -1585,7 +1636,7 @@ export default function SessionDetail() {
                 )}
               </button>
             )}
-          </div>
+                      </div>
           
           {/* Players */}
           {session.players.map(player => (
@@ -1618,7 +1669,7 @@ export default function SessionDetail() {
                   }}
                   className={`text-xs px-3 py-1.5 rounded-md ${
                     pendingReviewIds.has(player.id) 
-                      ? "bg-indigo-600 hover:bg-indigo-700 text-white font-medium" 
+                      ? "bg-red-600 hover:bg-red-700 text-white font-medium" 
                       : "bg-gray-700 text-gray-300"
                   } flex items-center transition-colors`}
                   disabled={!pendingReviewIds.has(player.id)}
@@ -1628,7 +1679,7 @@ export default function SessionDetail() {
                       <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                       </svg>
-                      Rate
+                      <span className="animate-pulse">Rate</span>
                     </>
                   ) : (
                     <>
@@ -1643,9 +1694,9 @@ export default function SessionDetail() {
             </div>
           ))}
         </div>
-      </div>
-    </div>
-    
+                  </div>
+                </div>
+
     {/* Pending Join Requests - Only visible to host */}
     {isCreatedByUser() && pendingRequests.length > 0 && (
       <div className="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700">
@@ -1671,16 +1722,16 @@ export default function SessionDetail() {
                       ) : (
                         <div className="text-lg text-gray-300 font-semibold">
                           {request.user.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="ml-3">
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-3">
                       <p className="text-white font-medium">{request.user.name}</p>
                       <p className="text-xs text-gray-400">
                         {new Date(request.createdAt).toLocaleDateString()} at {new Date(request.createdAt).toLocaleTimeString()}
-                      </p>
+                        </p>
+                      </div>
                     </div>
-                  </div>
                   
                   <div className="flex gap-2">
                     <button
@@ -1701,22 +1752,22 @@ export default function SessionDetail() {
                       </svg>
                       Approve
                     </button>
-                  </div>
-                </div>
+                    </div>
+                    </div>
                 
                 {request.message && (
                   <div className="mt-3 bg-gray-800/70 p-3 rounded-md border-l-2 border-yellow-500">
                     <p className="text-sm text-gray-300 italic">"{request.message}"</p>
                   </div>
                 )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
         </div>
       </div>
     )}
-  </div>
-  
+            </div>
+
   {/* Photos section - now as a full-width row */}
   <div className="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700">
     <div className="p-6">
@@ -1724,21 +1775,21 @@ export default function SessionDetail() {
         <h3 className="text-xl font-semibold text-white flex items-center">
           <svg className="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+                </svg>
           Session Photos
         </h3>
-        
+
         {session && session.status !== 'cancelled' && hasUserJoined() && (
-          <Link
+                  <Link
             href={`/sessions/${session.id}/photos`}
             className="px-3 py-1.5 rounded-md text-sm font-medium bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center"
-          >
+                  >
             <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+                    </svg>
             Upload Photos
-          </Link>
-        )}
+                  </Link>
+                )}
       </div>
 
       {isLoading ? (
@@ -1753,7 +1804,7 @@ export default function SessionDetail() {
         <div className="flex flex-col justify-center items-center h-40 bg-gray-800/40 rounded-lg">
           <svg className="w-8 h-8 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+                  </svg>
           <p className="text-gray-400 text-sm">No photos uploaded yet</p>
         </div>
       ) : (
@@ -1773,7 +1824,7 @@ export default function SessionDetail() {
               />
               
               {photo.uploadedBy && photo.uploadedBy.id === currentUserId && (
-                <button
+                  <button
                   className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1783,8 +1834,8 @@ export default function SessionDetail() {
                   aria-label="Delete photo"
                 >
                   <FaTrash size={14} />
-                </button>
-              )}
+                  </button>
+                )}
             </div>
           ))}
           
@@ -1813,20 +1864,20 @@ export default function SessionDetail() {
                 <h3 className="text-lg font-medium text-yellow-300">Action Required: Update Session Status</h3>
               </div>
               <p className="text-gray-300 mb-5 pl-9">
-                <strong>Important:</strong> This session is in the past but not marked as completed. 
+                <strong>Important:</strong> This session has ended but is not marked as completed. 
                 Player ratings can only be submitted for completed sessions. Please update the status
                 to enable rating functionality.
               </p>
               <div className="flex justify-end">
-                <button
+                  <button
                   onClick={markSessionAsCompleted}
                   className="bg-yellow-500 hover:bg-yellow-600 text-white py-2.5 px-5 rounded-lg transition flex items-center font-medium"
-                >
+                  >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                  </svg>
+                    </svg>
                   Mark Session as Completed
-                </button>
+                  </button>
               </div>
             </div>
           </div>
@@ -1838,21 +1889,18 @@ export default function SessionDetail() {
         {/* Rate Players Modal */}
         {session && (
           <RatePlayersModal
+            session={{
+              id: session.id,
+              title: session.title,
+              status: session.status,
+              date: session.date,
+              creator: session.creator,
+              players: session.players
+            }}
             isOpen={isRatePlayersModalOpen}
             onClose={() => setIsRatePlayersModalOpen(false)}
-            sessionId={session.id}
-            sessionTitle={session.title}
-            sessionStatus={session.status}
-            sessionCreatorId={session.creator?.id || ''}
-            players={[
-              // Add creator
-              session.creator,
-              // Add only players that aren't the creator
-              ...session.players.filter(player => player.id !== session.creator.id)
-            ]}
-            pendingReviewPlayers={pendingReviews?.pendingReviewPlayers || []}
-            onSubmitRating={(reviewedPlayerId) => {
-              console.log('Rated player:', reviewedPlayerId);
+            onSuccess={() => {
+              console.log('Successfully rated player, refreshing pending reviews');
               // After rating a player, refetch the pending reviews
               fetchPendingReviews();
             }}

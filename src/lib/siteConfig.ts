@@ -7,8 +7,8 @@ const DEFAULT_CONFIG = {
   siteName: 'PickleBall App',
   tagline: 'Connect with fellow pickleball players and join sessions',
   primaryColor: '#6366f1',
-  logo: '/logo.png',
-  favicon: '/favicon.ico',
+  logo: '/uploads/logo/default-logo.png',
+  favicon: '/uploads/logo/default-favicon.ico',
 };
 
 /**

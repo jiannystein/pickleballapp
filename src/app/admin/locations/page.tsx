@@ -125,28 +125,6 @@ export default function AdminLocations() {
     }
   }
 
-  async function handleDeleteLocation(locationId: string) {
-    try {
-      setDeleteLoading(locationId);
-      const res = await fetch(`/api/admin/locations/${locationId}`, {
-        method: 'DELETE',
-      });
-      
-      if (res.ok) {
-        setLocations(locations.filter(location => location.id !== locationId));
-        setDeleteConfirmation(null);
-      } else {
-        const data = await res.json();
-        setError(`Failed to delete location: ${data.error || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Error deleting location:', err);
-      setError('Failed to delete location');
-    } finally {
-      setDeleteLoading(null);
-    }
-  }
-
   async function handleDeleteLocationRequest(requestId: string) {
     try {
       setDeleteLoading(requestId);
@@ -169,6 +147,28 @@ export default function AdminLocations() {
     }
   }
 
+  async function handleDeleteLocation(locationId: string) {
+    try {
+      setDeleteLoading(locationId);
+      const res = await fetch(`/api/admin/locations/${locationId}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        setLocations(locations.filter(location => location.id !== locationId));
+        setDeleteConfirmation(null);
+      } else {
+        const data = await res.json();
+        setError(`Failed to delete location: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error deleting location:', err);
+      setError('Failed to delete location');
+    } finally {
+      setDeleteLoading(null);
+    }
+  }
+
   function formatDate(dateString: string) {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -176,6 +176,10 @@ export default function AdminLocations() {
       month: 'short',
       day: 'numeric',
     });
+  }
+
+  function handleEditLocation(locationId: string) {
+    router.push(`/admin/locations/edit/${locationId}`);
   }
 
   if (loading) {
@@ -303,23 +307,26 @@ export default function AdminLocations() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700">
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
                   {locations.length > 0 ? (
-                    locations.map((location) => (
-                      <tr key={location.id} className="hover:bg-gray-700/50">
+                    locations.map(location => (
+                      <tr key={location.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-white">{location.name}</div>
+                          <div className="font-medium text-white">{location.name}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-gray-300">{location.address}</div>
-                          {location.instructions && (
-                            <div className="text-xs text-gray-400 mt-1">{location.instructions}</div>
-                          )}
+                          <div className="text-gray-300">{location.address}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300">{formatDate(location.createdAt)}</div>
+                          <div className="text-gray-300">{formatDate(location.createdAt)}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleEditLocation(location.id)}
+                            className="text-indigo-400 hover:text-indigo-300 mr-3"
+                          >
+                            Edit
+                          </button>
                           <button
                             onClick={() => setDeleteConfirmation({ id: location.id, type: 'location' })}
                             className="text-red-400 hover:text-red-300"
@@ -351,7 +358,7 @@ export default function AdminLocations() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="px-6 py-4 text-center text-gray-400">
+                      <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                         No approved locations found
                       </td>
                     </tr>
@@ -388,68 +395,45 @@ export default function AdminLocations() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700">
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
                   {pendingRequests.length > 0 ? (
-                    pendingRequests.map((request) => (
-                      <tr key={request.id} className="hover:bg-gray-700/50">
+                    pendingRequests.map(request => (
+                      <tr key={request.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-white">{request.name}</div>
+                          <div className="font-medium text-white">{request.name}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-gray-300">{request.address}</div>
+                          <div className="text-gray-300">{request.address}</div>
                           {request.instructions && (
-                            <div className="text-xs text-gray-400 mt-1">{request.instructions}</div>
+                            <div className="text-gray-500 text-sm mt-1 truncate max-w-xs">
+                              {request.instructions.substring(0, 60)}
+                              {request.instructions.length > 60 ? '...' : ''}
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">{request.requestedBy.name}</div>
-                          <div className="text-xs text-gray-400">{request.requestedBy.email}</div>
+                          <div className="text-gray-300">{request.requestedBy.name}</div>
+                          <div className="text-gray-500 text-sm">{request.requestedBy.email}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button 
-                            onClick={() => handleApproveRequest(request.id)} 
-                            className="bg-green-800/50 hover:bg-green-700/50 text-green-400 px-2 py-1 rounded text-xs mr-2"
+                          <button
+                            onClick={() => handleApproveRequest(request.id)}
+                            className="text-green-400 hover:text-green-300 mr-4"
                           >
                             Approve
                           </button>
-                          <button 
-                            onClick={() => handleRejectRequest(request.id)} 
-                            className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs mr-2"
+                          <button
+                            onClick={() => handleRejectRequest(request.id)}
+                            className="text-red-400 hover:text-red-300"
                           >
                             Reject
                           </button>
-                          <button
-                            onClick={() => setDeleteConfirmation({ id: request.id, type: 'request' })}
-                            className="bg-red-800/50 hover:bg-red-700/50 text-red-400 px-2 py-1 rounded text-xs"
-                          >
-                            Delete
-                          </button>
-                          {deleteConfirmation?.id === request.id && deleteConfirmation.type === 'request' && (
-                            <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded text-red-400 text-xs text-left">
-                              Are you sure you want to delete this request?
-                              <div className="mt-2 flex space-x-2">
-                                <button
-                                  onClick={() => handleDeleteLocationRequest(request.id)}
-                                  disabled={deleteLoading === request.id}
-                                  className={`px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-white ${deleteLoading === request.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                  {deleteLoading === request.id ? 'Deleting...' : 'Confirm'}
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirmation(null)}
-                                  className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="px-6 py-4 text-center text-gray-400">
+                      <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                         No pending location requests
                       </td>
                     </tr>

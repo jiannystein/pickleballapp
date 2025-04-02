@@ -77,6 +77,8 @@ model LocationRequest {
   name         String
   address      String
   instructions String?
+  photoUrl     String?
+  bookingUrl   String?
   status       String   @default("pending")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -204,4 +206,18 @@ model BugReport {
   resolvedBy     String?
   resolutionNote String?
   resolvedAt     DateTime?
+}
+
+model PendingReviewState {
+  id                 String   @id @default(cuid())
+  sessionId          String
+  userId             String
+  pendingReviewCount Int      @default(0)
+  hasUnreviewedPlayers Boolean @default(true)
+  reviewedAllPlayers  Boolean @default(false)
+  lastUpdated        DateTime @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+  @@index([sessionId])
 }

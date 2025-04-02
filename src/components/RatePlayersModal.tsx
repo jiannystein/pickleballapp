@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
+import usePendingReviews from '@/lib/usePendingReviews';
+import { useRouter } from 'next/navigation';
+
+// Debug flag to control logging
+const DEBUG = process.env.NODE_ENV === 'development' && false; // Set to true only when debugging
 
 // Re-implementing the StarRating component here for simplicity
 function StarRating({ value, onChange }: { value: number; onChange: (rating: number) => void }) {
@@ -54,35 +59,22 @@ interface Session {
 }
 
 interface RatePlayersModalProps {
+  session: Session;
   isOpen: boolean;
   onClose: () => void;
-  sessionId: string;
-  sessionTitle: string;
-  sessionStatus: string;
-  sessionCreatorId: string;
-  players: Player[];
-  onSubmitRating?: (reviewedPlayerId: string) => void;
-  pendingReviewPlayers?: Player[];
+  onSuccess?: () => void;
 }
 
-export default function RatePlayersModal({ 
-  isOpen, 
-  onClose, 
-  sessionId,
-  sessionTitle,
-  sessionStatus,
-  sessionCreatorId,
-  players, 
-  onSubmitRating,
-  pendingReviewPlayers = [] 
-}: RatePlayersModalProps) {
+export default function RatePlayersModal({ session, isOpen, onClose, onSuccess }: RatePlayersModalProps) {
   const { data: authSession } = useSession();
+  const router = useRouter(); // Add router for navigation
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [reviewedPlayers, setReviewedPlayers] = useState<Set<string>>(new Set());
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(true); // Add loading state for players
   
   // Rating states
   const [skillLevel, setSkillLevel] = useState(0);
@@ -92,25 +84,18 @@ export default function RatePlayersModal({
   const [fairPlay, setFairPlay] = useState(0);
   const [comment, setComment] = useState("");
 
-  // Set the selected player to the first pending review player when the modal opens
-  useEffect(() => {
-    if (isOpen && pendingReviewPlayers.length > 0 && !selectedPlayer) {
-      setSelectedPlayer(pendingReviewPlayers[0]);
-    }
-  }, [isOpen, pendingReviewPlayers, selectedPlayer]);
-
   // Calculate overall rating
-  const calculateOverallRating = () => {
+  const calculateOverallRating = useCallback(() => {
     const ratings = [skillLevel, sportsmanship, communication, punctuality, fairPlay];
     const validRatings = ratings.filter(rating => rating > 0);
     if (validRatings.length === 0) return 0;
     
     const sum = validRatings.reduce((total, rating) => total + rating, 0);
     return (sum / validRatings.length).toFixed(1);
-  };
+  }, [skillLevel, sportsmanship, communication, punctuality, fairPlay]);
 
   // Handle rating change
-  const handleRatingChange = (field: string, value: number) => {
+  const handleRatingChange = useCallback((field: string, value: number) => {
     switch (field) {
       case "skillLevel":
         setSkillLevel(value);
@@ -130,10 +115,10 @@ export default function RatePlayersModal({
       default:
         break;
     }
-  };
+  }, []);
 
   // Reset form fields
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setSkillLevel(0);
     setSportsmanship(0);
     setCommunication(0);
@@ -143,91 +128,50 @@ export default function RatePlayersModal({
     setSelectedPlayer(null);
     setError(null);
     setSuccess(null);
-  };
+  }, []);
 
   // Get players who can be rated by the current user
-  const getPlayersToRate = () => {
-    // If pendingReviewPlayers is provided, use that as the source of truth
-    if (pendingReviewPlayers && pendingReviewPlayers.length > 0) {
-      console.log('Using pendingReviewPlayers:', pendingReviewPlayers);
-      return pendingReviewPlayers;
-    }
-    
-    const playersToRate: Player[] = [];
-    
+  const getPlayersToRate = useCallback(() => {
     if (!currentUserId) {
-      console.log('No current user ID available');
+      if (DEBUG) console.log('No current user ID, returning empty array');
       return [];
     }
     
-    console.log('Current user ID:', currentUserId);
-    console.log('Session creator ID:', sessionCreatorId);
-    console.log('Session players:', players);
-    console.log('Session status:', sessionStatus);
-    
-    // Check if the session is completed
-    if (sessionStatus !== 'completed') {
-      console.log('Session is not completed, status is:', sessionStatus);
+    if (DEBUG) {
+      console.log('Current user ID:', currentUserId);
+      console.log('Session creator ID:', session.creator.id);
     }
     
-    // Create a Set to keep track of added player IDs to prevent duplicates
-    const addedPlayerIds = new Set<string>();
+    // Start with an empty array
+    const playersToRate: Player[] = [];
     
     // If the current user is the creator, they can rate all players except themselves
-    if (sessionCreatorId === currentUserId) {
-      console.log('User is the creator, can rate all players');
-      const filteredPlayers = players.filter(player => player.id !== currentUserId);
-      console.log('Creator can rate these players:', filteredPlayers);
-      
-      // Add players, ensuring no duplicates
-      for (const player of filteredPlayers) {
-        if (!addedPlayerIds.has(player.id)) {
-          playersToRate.push(player);
-          addedPlayerIds.add(player.id);
-        }
-      }
+    if (session.creator.id === currentUserId) {
+      const filteredPlayers = session.players.filter(player => player.id !== currentUserId);
+      playersToRate.push(...filteredPlayers);
     } 
     // If the current user is a player, they can rate the creator (if not themselves) and other players
-    else if (players.some(player => player.id === currentUserId)) {
-      console.log('User is a player, can rate creator and other players');
-      
+    else if (session.players.some(player => player.id === currentUserId)) {
       // Add creator if not the current user
-      if (sessionCreatorId !== currentUserId) {
-        // Get creator from players
-        const creator = players.find(player => player.id === sessionCreatorId);
-        if (creator && !addedPlayerIds.has(creator.id)) {
-          console.log('Adding creator to rate:', creator);
-          playersToRate.push(creator);
-          addedPlayerIds.add(creator.id);
-        }
+      if (session.creator.id !== currentUserId) {
+        playersToRate.push(session.creator);
       }
-      
-      // Add all other players except the current user and those already added
-      for (const player of players) {
-        if (player.id !== currentUserId && !addedPlayerIds.has(player.id)) {
-          console.log('Adding other player to rate:', player);
-          playersToRate.push(player);
-          addedPlayerIds.add(player.id);
-        }
-      }
-    } else {
-      console.log('User is neither creator nor player in this session');
+      // Add all other players except the current user
+      const otherPlayers = session.players.filter(player => player.id !== currentUserId);
+      playersToRate.push(...otherPlayers);
     }
     
-    console.log('All potential players to rate before filtering:', playersToRate);
-    console.log('Already reviewed players set:', reviewedPlayers);
-    console.log('Already reviewed players array:', Array.from(reviewedPlayers));
-    
     // Filter out already reviewed players
-    const filteredPlayers = playersToRate.filter(player => {
-      const isAlreadyReviewed = reviewedPlayers.has(player.id);
-      console.log(`Player ${player.name} (${player.id}) already reviewed: ${isAlreadyReviewed}`);
-      return !isAlreadyReviewed;
-    });
-    
-    console.log('Final filtered players to rate:', filteredPlayers);
-    return filteredPlayers;
-  };
+    return playersToRate.filter(player => !reviewedPlayers.has(player.id));
+  }, [currentUserId, session, reviewedPlayers]);
+
+  // Calculate pending review players using memoization
+  const pendingReviewPlayers = useMemo(() => {
+    return getPlayersToRate();
+  }, [getPlayersToRate]);
+
+  // Replace the refreshGlobalPendingReviewsCount function with our hook
+  const { notifyPendingReviewsUpdate } = usePendingReviews();
 
   // Submit review
   const handleSubmit = async (e: React.FormEvent) => {
@@ -263,12 +207,12 @@ export default function RatePlayersModal({
         comment: comment.trim() || undefined,
       };
       
-      console.log('Submitting review with data:', reviewData);
-      console.log('Current user ID:', currentUserId);
-      console.log('Session ID:', sessionId);
-      console.log('Session status:', sessionStatus);
+      if (DEBUG) {
+        console.log('Submitting review with data:', reviewData);
+        console.log('Session ID:', session.id);
+      }
       
-      const response = await fetch(`/api/sessions/${sessionId}/reviews`, {
+      const response = await fetch(`/api/sessions/${session.id}/reviews`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -278,18 +222,15 @@ export default function RatePlayersModal({
         body: JSON.stringify(reviewData),
       });
       
-      console.log('Review submission response status:', response.status);
-      
-      let data;
-      try {
-        data = await response.json();
-        console.log('Review submission response:', data);
-      } catch (jsonError) {
-        console.error('Error parsing response JSON:', jsonError);
-      }
-      
       if (!response.ok) {
-        throw new Error(data?.error || `Failed to submit review: ${response.status} ${response.statusText}`);
+        let errorMessage = `Failed to submit review: ${response.status}`;
+        try {
+          const data = await response.json();
+          errorMessage = data?.error || errorMessage;
+        } catch (e) {
+          // Ignore JSON parsing errors
+        }
+        throw new Error(errorMessage);
       }
       
       // Update reviewed players set
@@ -302,118 +243,109 @@ export default function RatePlayersModal({
       // Show success message
       setSuccess(`Successfully rated ${selectedPlayer.name}!`);
       
-      // Reset form after success
+      // Call the notifyPendingReviewsUpdate from our hook
+      await notifyPendingReviewsUpdate();
+      
+      // Reset form for another review
       resetForm();
       
-      // Call the success callback
-      if (onSubmitRating) {
-        onSubmitRating(selectedPlayer.id);
+      // Alert parent component of success
+      if (onSuccess) {
+        onSuccess();
       }
       
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const remainingPlayers = pendingReviewPlayers.filter(player => player.id !== selectedPlayer.id);
+      
+      // If no more players to rate, close the modal and navigate to My Sessions > Completed
+      if (remainingPlayers.length === 0) {
+        // Close modal after a short delay so user can see success message
+        setTimeout(() => {
+          onClose();
+          // Navigate to My Sessions > Completed tab
+          router.push('/my-sessions?tab=completed');
+        }, 1500);
+      } else {
+        // Set the next player to rate
+        setSelectedPlayer(remainingPlayers[0]);
+      }
+    } catch (error: any) {
+      setError(error.message || "Failed to submit review");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Fetch current user ID and already reviewed players
+  // Fetch data about the current user
   useEffect(() => {
-    console.log('RatePlayersModal - useEffect triggered', { isOpen, sessionId });
+    // Only run this effect when modal is opened
+    if (!isOpen) return;
     
-    // First try to get from auth session
+    const getUserId = async () => {
+      // First, try to get the ID from the auth session
     if (authSession?.user?.id) {
-      console.log('Setting current user ID from authSession:', authSession.user.id);
       setCurrentUserId(authSession.user.id);
-    } else {
-      // If auth session fails, try to fetch user ID directly
-      const fetchUserId = async () => {
+        return;
+      }
+      
+      // Otherwise, fetch from API
         try {
           const response = await fetch('/api/auth/me');
           if (response.ok) {
-            const userData = await response.json();
-            console.log('Fetched user ID directly:', userData.userId);
-            setCurrentUserId(userData.userId);
-          } else {
-            console.error('Failed to fetch user ID:', response.status);
+          const data = await response.json();
+          setCurrentUserId(data.userId);
           }
         } catch (error) {
           console.error('Error fetching user ID:', error);
         }
       };
-      fetchUserId();
-    }
+    
+    getUserId();
     
     // Fetch already reviewed players for this session
-    if (isOpen && sessionId) {
-      // First check if the session is actually completed
-      const checkSessionStatus = async () => {
-        // If session is not completed, we might need to update it
-        if (sessionStatus !== 'completed') {
-          console.log('Session is not completed, status:', sessionStatus);
-          try {
-            // Try to update the session status
-            const updateResponse = await fetch(`/api/sessions/update-status`, {
-              method: 'POST',
-              credentials: 'include'
-            });
-            console.log('Update status response:', updateResponse.status);
-          } catch (error) {
-            console.error('Error updating session status:', error);
-          }
-        }
-      };
-      
-      checkSessionStatus();
-      
+    if (session?.id) {
       const fetchReviews = async () => {
+        setIsLoadingPlayers(true);
         try {
-          console.log('Making fetch request to:', `/api/sessions/${sessionId}/reviews`);
-          const response = await fetch(`/api/sessions/${sessionId}/reviews`, {
+          const response = await fetch(`/api/sessions/${session.id}/reviews`, {
             credentials: 'include', // Include cookies
             headers: {
               'Cache-Control': 'no-cache'
             }
           });
           
-          console.log('Fetch response status:', response.status);
-          
           if (response.ok) {
             const reviews = await response.json();
-            console.log('Reviews fetched:', reviews);
             
             // Use the currentUserId directly or from state if available
             const userId = authSession?.user?.id || currentUserId;
-            console.log('Using user ID for filtering:', userId);
             
             const userReviews = reviews.filter(
               (review: any) => review.reviewerId === userId
             );
-            console.log('Filtered user reviews:', userReviews);
             
             const reviewedPlayerIds = userReviews.map((review: any) => review.revieweeId);
-            console.log('Reviewed player IDs:', reviewedPlayerIds);
             
             setReviewedPlayers(
               new Set(reviewedPlayerIds)
             );
-          } else {
-            // Log error response
-            try {
-              const errorData = await response.json();
-              console.error('Error fetching reviews:', errorData);
-            } catch (e) {
-              console.error('Error parsing error response:', e);
-            }
           }
         } catch (error) {
           console.error("Error fetching reviews:", error);
+        } finally {
+          setIsLoadingPlayers(false);
         }
       };
       
       fetchReviews();
     }
-  }, [authSession, isOpen, sessionId, currentUserId]);
+  }, [authSession, isOpen, session?.id, currentUserId]);
+
+  // Set the selected player to the first pending review player when the modal opens
+  useEffect(() => {
+    if (isOpen && !isLoadingPlayers && pendingReviewPlayers.length > 0 && !selectedPlayer) {
+      setSelectedPlayer(pendingReviewPlayers[0]);
+    }
+  }, [isOpen, pendingReviewPlayers, selectedPlayer, isLoadingPlayers]);
 
   // Function to check if all rating categories have been filled out
   const allCategoriesRated = () => {
@@ -424,42 +356,55 @@ export default function RatePlayersModal({
            fairPlay > 0;
   };
 
+  // Add effect to auto-close when no players to rate
+  useEffect(() => {
+    if (isOpen && !isLoadingPlayers && pendingReviewPlayers.length === 0) {
+      // Auto-close after 2 seconds when there are no players to rate
+      const timer = setTimeout(() => {
+        if (onClose) {
+          onClose();
+          // Clear hash from URL if it exists
+          if (typeof window !== 'undefined' && window.location.hash === '#rate-players') {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+          // Navigate to My Sessions > Completed tab
+          router.push('/my-sessions?tab=completed');
+        }
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, pendingReviewPlayers.length, onClose, isLoadingPlayers, router]);
+
   // Don't render if the modal is not open
   if (!isOpen) return null;
 
-  const playersToRate = getPlayersToRate();
+  const playersToRate = pendingReviewPlayers;
   const hasPlayersToRate = playersToRate.length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-white">Rate Players</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
+      <div className="bg-gray-850 rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-gray-700 relative">
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white"
+          className="absolute top-4 right-4 text-gray-400 hover:text-white p-1"
               aria-label="Close"
             >
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
+        
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-white mb-6">Rate Players</h2>
           
-          {error && (
-            <div className="bg-red-900/30 border border-red-800 text-red-100 px-4 py-3 rounded mb-4">
-              {error}
+          {isLoadingPlayers ? (
+            // Loading state
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+              <p className="mt-4 text-gray-400">Loading players...</p>
             </div>
-          )}
-          
-          {success && (
-            <div className="bg-green-900/30 border border-green-800 text-green-100 px-4 py-3 rounded mb-4">
-              {success}
-            </div>
-          )}
-          
-          {hasPlayersToRate ? (
+          ) : hasPlayersToRate ? (
             <>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -488,7 +433,7 @@ export default function RatePlayersModal({
                       <div className="ml-3">
                         <p className="text-white font-medium">
                           {player.name}
-                          {player.id === sessionCreatorId && (
+                          {player.id === session.creator.id && (
                             <span className="ml-2 text-xs text-indigo-300">(Host)</span>
                           )}
                         </p>
@@ -504,7 +449,7 @@ export default function RatePlayersModal({
                     <div className="bg-gray-750 p-4 rounded-md mb-4">
                       <h3 className="text-white font-medium mb-2 flex items-center">
                         Rating for {selectedPlayer.name}
-                        {selectedPlayer.id === sessionCreatorId && (
+                        {selectedPlayer.id === session.creator.id && (
                           <span className="ml-2 text-xs bg-indigo-900 text-indigo-200 px-2 py-0.5 rounded">Host</span>
                         )}
                       </h3>
@@ -550,14 +495,26 @@ export default function RatePlayersModal({
                           </svg>
                         </div>
                       </div>
+                      
+                      <div className="flex space-x-3 justify-end">
+                        <button
+                          type="button"
+                          onClick={resetForm}
+                          className="px-4 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors"
+                        >
+                          Reset
+                        </button>
+                        
                       <button
                         type="submit"
                         disabled={isSubmitting || !allCategoriesRated()}
-                        className={`px-4 py-2 rounded-md transition-colors flex items-center justify-center ${
-                          !allCategoriesRated()
-                            ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                        }`}
+                          className={`px-4 py-2 rounded-md font-medium flex items-center justify-center min-w-28 ${
+                            isSubmitting
+                              ? 'bg-indigo-700 cursor-not-allowed'
+                              : allCategoriesRated()
+                                ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                : 'bg-gray-700 cursor-not-allowed text-gray-400'
+                          } transition-colors`}
                       >
                         {isSubmitting ? (
                           <>
@@ -565,13 +522,26 @@ export default function RatePlayersModal({
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            Rating...
+                              Submitting...
                           </>
                         ) : (
-                          "Submit Rating"
+                            'Submit Rating'
                         )}
                       </button>
+                      </div>
                     </div>
+                    
+                    {error && (
+                      <div className="p-3 bg-red-900/40 border border-red-800 rounded-md text-red-200 text-sm mt-4">
+                        {error}
+                      </div>
+                    )}
+                    
+                    {success && (
+                      <div className="p-3 bg-green-900/40 border border-green-800 rounded-md text-green-200 text-sm mt-4">
+                        {success}
+                      </div>
+                    )}
                   </div>
                 </form>
               ) : (

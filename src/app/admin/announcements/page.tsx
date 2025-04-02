@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Announcement } from '@/types';
 
@@ -25,6 +25,13 @@ export default function AnnouncementsAdmin() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  // Get current datetime in YYYY-MM-DDThh:mm format for min attribute
+  const now = new Date();
+  const localDatetime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 
   useEffect(() => {
     checkAdminAccess();
@@ -116,6 +123,13 @@ export default function AnnouncementsAdmin() {
     }
   }
 
+  // Function to handle clicking the date picker wrapper
+  const handleDatePickerClick = () => {
+    if (dateInputRef.current) {
+      dateInputRef.current.showPicker();
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 px-4 sm:px-6 lg:px-8">
@@ -136,16 +150,16 @@ export default function AnnouncementsAdmin() {
         <h1 className="text-3xl font-bold text-white mb-8">Manage Announcements</h1>
 
         {/* Create new announcement form */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Create New Announcement</h2>
+        <div className="bg-gray-800 rounded-lg p-6 mb-12">
+          <h2 className="text-xl font-semibold text-white mb-6">Create New Announcement</h2>
           {error && (
-            <div className="bg-red-900 border border-red-700 text-white px-4 py-3 rounded mb-4">
+            <div className="bg-red-900 border border-red-700 text-white px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="title" className="block text-sm font-medium text-gray-300 mb-2">
                 Title
               </label>
               <input
@@ -159,7 +173,7 @@ export default function AnnouncementsAdmin() {
             </div>
 
             <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
                 Message
               </label>
               <textarea
@@ -172,9 +186,9 @@ export default function AnnouncementsAdmin() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-6">
               <div>
-                <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">
+                <label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-2">
                   Priority
                 </label>
                 <select
@@ -190,16 +204,24 @@ export default function AnnouncementsAdmin() {
               </div>
 
               <div>
-                <label htmlFor="expiresAt" className="block text-sm font-medium text-gray-300 mb-1">
+                <label htmlFor="expiresAt" className="block text-sm font-medium text-gray-300 mb-2">
                   Expires At (Optional)
                 </label>
-                <input
-                  type="datetime-local"
-                  id="expiresAt"
-                  value={newAnnouncement.expiresAt}
-                  onChange={(e) => setNewAnnouncement(prev => ({ ...prev, expiresAt: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={handleDatePickerClick}
+                >
+                  <input
+                    ref={dateInputRef}
+                    type="datetime-local"
+                    id="expiresAt"
+                    value={newAnnouncement.expiresAt}
+                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, expiresAt: e.target.value }))}
+                    min={localDatetime}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <div className="absolute inset-0" />
+                </div>
               </div>
             </div>
 
@@ -216,7 +238,7 @@ export default function AnnouncementsAdmin() {
 
         {/* Active announcements list */}
         <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Active Announcements</h2>
+          <h2 className="text-xl font-semibold text-white mb-6">Active Announcements</h2>
           <div className="space-y-4">
             {announcements.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No active announcements</p>

@@ -3,6 +3,48 @@ import prisma from '@/lib/prisma';
 import { getUser } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
+// Define types for our session data
+interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
+interface SessionLocation {
+  id: string;
+  name: string;
+  address: string;
+  instructions: string | null;
+  photoUrl: string | null;
+}
+
+interface RawSessionData {
+  id: string;
+  title: string;
+  description: string | null;
+  date: Date;
+  duration: number;
+  maxPlayers: number;
+  status: string;
+  lookingForPlayers: boolean;
+  lookingForTeams: boolean;
+  price: number | null;
+  paymentMethod: string | null;
+  contactInfo: string | null;
+  isPrivate: boolean;
+  creatorId: string;
+  creatorName: string;
+  creatorEmail: string;
+  creatorAvatarUrl: string | null;
+  locationId: string;
+  locationName: string;
+  locationAddress: string;
+  locationInstructions: string | null;
+  locationPhotoUrl: string | null;
+  players: SessionUser[];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getUser(request);
@@ -16,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     // Get IDs of sessions where the user is a player
     const joinedSessionIds = await prisma.$queryRaw`
-      SELECT "A" FROM "_SessionPlayers" WHERE "B" = ${user.userId}
+      SELECT "A"::text FROM "_SessionPlayers" WHERE "B" = ${user.userId}::text
     `;
 
     // Format the IDs into an array
@@ -26,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Get sessions created by the user
     const createdSessionIds = await prisma.$queryRaw`
-      SELECT id FROM "Session" WHERE "creatorId" = ${user.userId}
+      SELECT id::text FROM "Session" WHERE "creatorId" = ${user.userId}::text
     `;
 
     // Format the created session IDs into an array
@@ -44,9 +86,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    // Fetch all relevant sessions (both created and joined)
-    const userSessions = await prisma.$queryRaw`
-      WITH session_data AS (
+    // Handle each ID separately in the query to avoid SQL injection and formatting issues
+    const sessionsPromises = allUserSessionIds.map(async (sessionId) => {
+      const sessionData = await prisma.$queryRaw<RawSessionData[]>`
         SELECT 
           s.*,
           c.id as "creatorId", 
@@ -57,32 +99,38 @@ export async function GET(request: NextRequest) {
           l.name as "locationName", 
           l.address as "locationAddress", 
           l.instructions as "locationInstructions",
-          l."photoUrl" as "locationPhotoUrl"
+          l."photoUrl" as "locationPhotoUrl",
+          COALESCE(
+            (SELECT json_agg(json_build_object(
+              'id', u.id, 
+              'name', u.name, 
+              'email', u.email, 
+              'avatarUrl', u."avatarUrl"
+            ))
+            FROM "_SessionPlayers" js
+            JOIN "User" u ON js."B"::text = u.id::text
+            WHERE js."A"::text = s.id::text
+            ), '[]'::json
+          ) as players
         FROM "Session" s
-        JOIN "User" c ON s."creatorId" = c.id
-        JOIN "Location" l ON s."locationId" = l.id
-        WHERE s.id IN (${Prisma.join(allUserSessionIds)})
-        ORDER BY s.date ASC
-      )
-      SELECT 
-        sd.*,
-        COALESCE(
-          (SELECT json_agg(json_build_object(
-            'id', u.id, 
-            'name', u.name, 
-            'email', u.email, 
-            'avatarUrl', u."avatarUrl"
-          ))
-          FROM "_SessionPlayers" js
-          JOIN "User" u ON js."B" = u.id
-          WHERE js."A" = sd.id
-          ), '[]'::json
-        ) as players
-      FROM session_data sd
-    `;
+        JOIN "User" c ON s."creatorId"::text = c.id::text
+        JOIN "Location" l ON s."locationId"::text = l.id::text
+        WHERE s.id::text = ${sessionId}::text
+      `;
+      
+      return sessionData[0]; // Get the first (and only) result
+    });
+
+    // Wait for all queries to complete
+    const userSessions = await Promise.all(sessionsPromises);
+
+    // Sort sessions by date
+    userSessions.sort((a: RawSessionData, b: RawSessionData) => {
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
 
     // Transform the raw data into the expected format
-    const formattedSessions = (userSessions as any[]).map((session: any) => ({
+    const formattedSessions = userSessions.map((session: RawSessionData) => ({
       id: session.id,
       title: session.title,
       description: session.description,
@@ -111,20 +159,6 @@ export async function GET(request: NextRequest) {
       },
       players: session.players || []
     }));
-
-    // Check for specific session ID
-    const hasTargetSession = formattedSessions.some(s => s.id === 'cm8v69h1c0001760k7ohv2tut');
-    console.log('Has target session cm8v69h1c0001760k7ohv2tut:', hasTargetSession);
-    
-    if (hasTargetSession) {
-      const targetSession = formattedSessions.find(s => s.id === 'cm8v69h1c0001760k7ohv2tut');
-      console.log('Target session details:', {
-        id: targetSession?.id,
-        title: targetSession?.title,
-        status: targetSession?.status,
-        players: targetSession?.players.map(p => p.id)
-      });
-    }
 
     return NextResponse.json(formattedSessions);
   } catch (error) {

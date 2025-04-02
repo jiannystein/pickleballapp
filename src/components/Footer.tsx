@@ -121,6 +121,7 @@ export default function Footer() {
                       src={config.logo} 
                       alt={config.siteName} 
                       fill 
+                      sizes="24px"
                       style={{objectFit: 'contain'}}
                       unoptimized={config.logo.startsWith('http')}
                     />

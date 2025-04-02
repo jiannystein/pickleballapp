@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { formatDateTime } from '@/lib/dateUtils';
+import { formatDateTime, isSessionEnded } from '@/lib/dateUtils';
 import NotificationBadge from '@/components/NotificationBadge';
 import { FaRegStar } from 'react-icons/fa6';
 import { PiConfettiFill } from 'react-icons/pi';
-import toast from 'react-hot-toast';
+import usePendingReviews from '@/lib/usePendingReviews';
+import { useMessagePortErrorSuppression } from '@/lib/useMessagePortErrorSuppression';
 
 interface User {
   id: string;
@@ -23,20 +24,6 @@ interface Location {
   address: string;
   instructions?: string;
   photoUrl?: string;
-}
-
-interface PendingReviewSession {
-  id: string;
-  title: string;
-  date: string;
-  totalParticipants: number;
-  pendingReviewsCount: number;
-  pendingReviewPlayers: {
-    id: string;
-    name: string;
-    avatarUrl?: string;
-  }[];
-  allReviewsComplete: boolean;
 }
 
 interface Session {
@@ -57,95 +44,47 @@ interface Session {
   status: string;
   isPrivate?: boolean;
   pendingReviews?: boolean;
-  pendingReviewsCount?: number;
-}
-
-// Interface for toast notification
-interface ToastProps {
-  visible: boolean;
 }
 
 export default function MySessionsPage() {
+  // Use the custom hook to suppress message port closed errors
+  useMessagePortErrorSuppression();
+  
   const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
-  const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
-  const [pendingReviewSessions, setPendingReviewSessions] = useState<Record<string, PendingReviewSession>>({});
-  const [showReviewReminder, setShowReviewReminder] = useState(false);
-
-  useEffect(() => {
-    fetchSessions();
-    fetchPendingReviews();
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
+  
+  // Use our custom hook for pending reviews
+  const { pendingReviewsCount, pendingSessions } = usePendingReviews();
+  
+  // Simple function to determine if a date is in the past
+  const isPast = useCallback((dateString: string) => {
+    return new Date(dateString) < new Date();
+  }, []);
+  
+  // Simple function to determine if a date is in the future
+  const isFuture = useCallback((dateString: string) => {
+    return new Date(dateString) > new Date();
   }, []);
 
-  useEffect(() => {
-    if (pendingReviewsCount > 0 && activeTab === 'completed') {
-      // Show toast notification about pending reviews
-      setShowReviewReminder(true);
-    } else {
-      setShowReviewReminder(false);
-    }
-  }, [pendingReviewsCount, activeTab]);
-
-  useEffect(() => {
-    if (showReviewReminder) {
-      const toastId = toast.custom((t: ToastProps) => (
-        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-gray-800 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
-          <div className="flex-1 w-0 p-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 pt-0.5">
-                <FaRegStar className="h-5 w-5 text-yellow-400" />
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-gray-200">
-                  Don't forget to rate the players
-                </p>
-                <p className="mt-1 text-sm text-gray-400">
-                  You have {pendingReviewsCount} {pendingReviewsCount === 1 ? 'session' : 'sessions'} with players waiting for your review.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex border-l border-gray-700">
-            <button
-              onClick={() => toast.dismiss(toastId)}
-              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-400 hover:text-indigo-300 focus:outline-none"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      ), { duration: 6000 });
-    }
-  }, [showReviewReminder, pendingReviewsCount]);
-
-  // Add a new effect to automatically update session statuses
-  useEffect(() => {
-    if (sessions.length > 0) {
-      const now = new Date();
-      // Create a temporary copy with updated statuses
-      const updatedSessions = sessions.map(session => {
-        // If the session date is in the past and it's not cancelled, mark it as completed
-        if (new Date(session.date) < now && session.status !== 'cancelled' && session.status !== 'completed') {
-          return { ...session, status: 'completed' };
-        }
-        return session;
-      });
-      
-      // Only update state if changes were made
-      if (JSON.stringify(updatedSessions) !== JSON.stringify(sessions)) {
-        setSessions(updatedSessions);
-      }
-    }
-  }, [sessions]);
-
-  async function fetchSessions() {
+  // Fetch sessions function - clean implementation
+  const fetchSessions = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
-      const res = await fetch('/api/sessions/user');
+      if (showLoading) {
+        setLoading(true);
+      }
+      
+      const res = await fetch('/api/sessions/user', {
+        cache: 'no-store',
+        headers: {
+          'pragma': 'no-cache',
+          'cache-control': 'no-cache'
+        }
+      });
       
       if (!res.ok) {
         if (res.status === 401) {
@@ -156,76 +95,119 @@ export default function MySessionsPage() {
       }
       
       const data = await res.json();
-      console.log('Fetched sessions from API:', data.length);
       
-      // Look for specific session
-      const targetSession = data.find((s: any) => s.id === 'cm8v69h1c0001760k7ohv2tut');
-      if (targetSession) {
-        console.log('Target session in API response:', {
-          id: targetSession.id,
-          title: targetSession.title,
-          status: targetSession.status,
-          players: targetSession.players?.map((p: any) => p.id)
+      // Get the current user ID if not already set
+      if (!currentUserId) {
+        const userRes = await fetch('/api/auth/me');
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          setCurrentUserId(userData.userId);
+        }
+      }
+      
+      // Process sessions to mark completed ones
+      const now = new Date();
+      const processedSessions = data.map((session: Session) => {
+        // If the session has ended and not cancelled/completed, mark as completed
+        if (session.status !== 'cancelled' && session.status !== 'completed') {
+          if (isSessionEnded(session)) {
+            return { ...session, status: 'completed' };
+          }
+        }
+        return session;
+      });
+      
+      // Update sessions with pending reviews information
+      if (pendingSessions.length > 0) {
+        const pendingSessionIds = new Set(pendingSessions.map(session => session.id));
+        
+        const finalSessions = processedSessions.map((session: Session) => {
+          if (pendingSessionIds.has(session.id)) {
+            return { ...session, pendingReviews: true };
+          }
+          if (session.status === 'completed' || new Date(session.date) < now) {
+            return { ...session, pendingReviews: false };
+          }
+          return session;
         });
+        
+        setSessions(finalSessions);
       } else {
-        console.log('Target session not found in API response');
+        setSessions(processedSessions);
       }
       
-      setSessions(data);
-
-      // Get the current user ID
-      const userRes = await fetch('/api/auth/me');
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        setCurrentUserId(userData.userId);
-        console.log('Current user ID:', userData.userId);
-      }
+      setLastRefreshTime(new Date());
     } catch (error) {
       console.error('Error fetching sessions:', error);
       setError('Failed to load sessions');
     } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchPendingReviews() {
-    try {
-      const res = await fetch('/api/sessions/pending-reviews');
-      if (res.ok) {
-        const data = await res.json();
-        setPendingReviewsCount(data.totalPendingReviews);
-        
-        // Create a map of sessions that need reviews
-        const pendingMap: Record<string, PendingReviewSession> = {};
-        data.sessions.forEach((session: PendingReviewSession) => {
-          pendingMap[session.id] = session;
-        });
-        setPendingReviewSessions(pendingMap);
+      if (showLoading) {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching pending reviews:', error);
     }
-  }
+  }, [router, currentUserId, pendingSessions]);
+  
+  // Setup regular polling with 15 second interval - client-side only
+  useEffect(() => {
+    let mounted = true;
+    let intervalId: NodeJS.Timeout;
+    
+    // Set initial loading state here to avoid hydration mismatch
+    setLoading(true);
+    
+    // Initial fetch
+    fetchSessions().finally(() => {
+      // Only update state if component is still mounted
+      if (mounted) {
+        setLoading(false);
+      }
+    });
+    
+    // Set up polling interval - 15 seconds like the Sessions page
+    intervalId = setInterval(() => {
+      if (mounted) {
+        fetchSessions(false);  // Don't show loading on refresh
+      }
+    }, 15000);
+    
+    // Handle page visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && mounted) {
+        fetchSessions(false);
+      }
+    };
+    
+    // Add visibility listener to refresh when tab becomes active
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Cleanup on unmount
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchSessions]);
+  
+  // Listen for pending-reviews-updated event
+  useEffect(() => {
+    let mounted = true;
+    
+    const handlePendingReviewsUpdate = () => {
+      if (mounted) {
+        fetchSessions(false);  // refresh without showing loading indicator
+      }
+    };
+    
+    window.addEventListener('pending-reviews-updated', handlePendingReviewsUpdate);
+    
+    return () => {
+      mounted = false;
+      window.removeEventListener('pending-reviews-updated', handlePendingReviewsUpdate);
+    };
+  }, [fetchSessions]);
 
-  // Filter sessions by tab
-  const getFilteredSessions = () => {
-    const now = new Date();
-    console.log('Total sessions before filtering:', sessions.length);
-    
-    // Debug specific session
-    const targetSession = sessions.find(s => s.id === 'cm8v69h1c0001760k7ohv2tut');
-    if (targetSession) {
-      console.log('Found target session:', {
-        id: targetSession.id,
-        title: targetSession.title,
-        status: targetSession.status,
-        date: targetSession.date,
-        isPast: new Date(targetSession.date) < now
-      });
-    } else {
-      console.log('Target session not found in sessions array');
-    }
-    
+  // Memoize filtered sessions
+  const filteredSessions = useMemo(() => {
     let filtered = [];
     
     switch (activeTab) {
@@ -233,14 +215,13 @@ export default function MySessionsPage() {
         filtered = sessions.filter(session => 
           session.status !== 'cancelled' && 
           session.status !== 'completed' && 
-          new Date(session.date) > now
+          isFuture(session.date)
         );
         break;
       case 'completed':
         filtered = sessions.filter(session => {
-          const isPast = new Date(session.date) < now;
           return session.status === 'completed' || 
-                 (session.status !== 'cancelled' && isPast);
+                 (session.status !== 'cancelled' && isSessionEnded(session));
         });
         break;
       case 'cancelled':
@@ -252,55 +233,25 @@ export default function MySessionsPage() {
         filtered = sessions;
     }
     
-    console.log(`Filtered ${activeTab} sessions:`, filtered.length);
-    
-    // Add pending review information to each session
-    const enhancedSessions = filtered.map(session => {
-      if (pendingReviewSessions[session.id]) {
-        return {
-          ...session,
-          pendingReviews: true,
-          pendingReviewsCount: pendingReviewSessions[session.id].pendingReviewsCount
-        };
-      }
-      return session;
-    });
-
-    // Check if the target session is in the filtered array
-    if (filtered.length > 0) {
-      console.log(`First ${activeTab} session:`, {
-        id: filtered[0].id,
-        title: filtered[0].title,
-        status: filtered[0].status,
-        date: filtered[0].date,
-        isPast: new Date(filtered[0].date) < now
-      });
-    }
-    
-    return enhancedSessions;
-  };
-
-  // Group sessions by month and day
-  const groupedSessions = () => {
-    const filtered = getFilteredSessions();
-
-    // Sort by date ascending for upcoming, descending for past
+    // Sort by date
     if (activeTab === 'upcoming') {
       filtered.sort((a, b) => {
         return new Date(a.date).getTime() - new Date(b.date).getTime();
       });
     } else {
       filtered.sort((a, b) => {
-        // For completed sessions, put pending reviews at the top
-        if (a.pendingReviews && !b.pendingReviews) return -1;
-        if (!a.pendingReviews && b.pendingReviews) return 1;
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
     }
+    
+    return filtered;
+  }, [sessions, activeTab, isSessionEnded, isFuture]);
 
+  // Memoize grouped sessions to avoid recalculation on every render
+  const groupedSessionsData = useMemo(() => {
     const grouped: Record<string, Session[]> = {};
     
-    filtered.forEach(session => {
+    filteredSessions.forEach(session => {
       const date = new Date(session.date);
       const monthYear = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       
@@ -312,10 +263,10 @@ export default function MySessionsPage() {
     });
     
     return grouped;
-  };
+  }, [filteredSessions]);
 
-  // Format duration in hours and minutes
-  function formatDuration(minutes: number) {
+  // Other utility functions...
+  const formatDuration = useCallback((minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     
@@ -326,62 +277,45 @@ export default function MySessionsPage() {
     } else {
       return `${hours} hour${hours > 1 ? 's' : ''} ${mins} minutes`;
     }
-  }
+  }, []);
 
-  // Determine if user created or joined the session
-  function getUserRole(session: Session) {
+  const getUserRole = useCallback((session: Session) => {
     if (session.creator.id === currentUserId) {
       return 'created';
     } else {
       return 'joined';
     }
-  }
+  }, [currentUserId]);
 
-  // Function to format date and time
-  const formatDateTime = (dateString: string) => {
+  const formatDateTime = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return {
       date: date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
       time: date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     };
-  };
+  }, []);
 
-  // Session Card Component
-  const SessionCard = ({ session, isCreator }: { session: Session, isCreator: boolean }) => {
+  // Memoize the SessionCard component to prevent unnecessary re-renders
+  const SessionCard = useCallback(({ session, isCreator }: { session: Session, isCreator: boolean }) => {
     const { date, time } = formatDateTime(session.date);
-    const isPastSession = new Date(session.date) < new Date();
-    const router = useRouter();
+    const sessionEnded = isSessionEnded(session);
     
     // Determine the status badge color
     let statusBadge = null;
     if (session.status === 'cancelled') {
       statusBadge = <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Cancelled</span>;
-    } else if (isPastSession || session.status === 'completed') {
+    } else if (sessionEnded || session.status === 'completed') {
       statusBadge = <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Completed</span>;
     } else {
       statusBadge = <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>;
     }
-
-    // Review badge
-    const reviewBadge = session.pendingReviews ? (
-      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 ml-2">
-        {session.pendingReviewsCount} {session.pendingReviewsCount === 1 ? 'Review' : 'Reviews'} Pending
-      </span>
-    ) : null;
-    
-    const cardBorderClass = session.pendingReviews 
-      ? "bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow border-2 border-indigo-500/40" 
-      : "bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow";
     
     return (
-      <div className={cardBorderClass}>
+      <div className="bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow">
         <div className="p-5">
           <div className="flex justify-between items-start mb-3">
             <h3 className="text-lg font-semibold text-white">{session.title}</h3>
-            <div className="flex flex-wrap gap-2 justify-end min-w-[140px]">
-              {statusBadge}
-              {reviewBadge}
-            </div>
+            {statusBadge}
           </div>
           
           <div className="mb-3">
@@ -416,11 +350,17 @@ export default function MySessionsPage() {
             {session.pendingReviews ? (
               <Link
                 href={`/sessions/${session.id}#rate-players`}
-                className="block w-full py-2 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md text-center transition-colors flex items-center justify-center gap-2"
+                className="block w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-md text-center transition-colors flex items-center justify-center gap-2 group relative"
               >
-                <FaRegStar className="inline-block" /> Rate Players
+                <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500 text-xs font-bold text-white animate-pulse">
+                  !
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <FaRegStar className="inline-block text-yellow-300" /> 
+                  <span>Rate Players</span>
+                </div>
               </Link>
-            ) : (isPastSession || session.status === 'completed') ? (
+            ) : (sessionEnded || session.status === 'completed') ? (
               <div className="flex items-center justify-center py-2 px-4 bg-gray-700 text-gray-400 rounded-md text-center gap-2">
                 <PiConfettiFill className="inline-block text-yellow-400" /> All Players Rated
               </div>
@@ -429,7 +369,7 @@ export default function MySessionsPage() {
         </div>
       </div>
     );
-  };
+  }, [formatDateTime, formatDuration]);
 
   if (loading) {
     return (
@@ -443,7 +383,6 @@ export default function MySessionsPage() {
     );
   }
 
-  const groupedSessionsData = groupedSessions();
   const hasUpcomingSessions = Object.keys(groupedSessionsData).length > 0;
 
   return (
@@ -451,12 +390,20 @@ export default function MySessionsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-white">My Sessions</h1>
-          <Link
-            href="/sessions/create"
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
-          >
-            Create Session
-          </Link>
+          <div className="flex items-center">
+            {lastRefreshTime && (
+              <p className="hidden md:block text-sm text-gray-400 mr-4">
+                Last updated: {lastRefreshTime.toLocaleTimeString()}
+                <span className="ml-2 text-gray-500">(refreshes every 15s)</span>
+              </p>
+            )}
+            <Link
+              href="/sessions/create"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+            >
+              Create Session
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -488,7 +435,11 @@ export default function MySessionsPage() {
             >
               Completed
             </button>
-            {pendingReviewsCount > 0 && <NotificationBadge count={pendingReviewsCount} className="-top-2 right-0" />}
+            {pendingReviewsCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                {pendingReviewsCount}
+              </span>
+            )}
           </div>
           <button
             onClick={() => setActiveTab('cancelled')}
@@ -507,7 +458,7 @@ export default function MySessionsPage() {
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mb-2"></div>
             <p className="text-gray-400">Loading sessions...</p>
           </div>
-        ) : Object.keys(groupedSessions()).length === 0 ? (
+        ) : Object.keys(groupedSessionsData).length === 0 ? (
           <div className="text-center py-16 bg-gray-800 rounded-lg">
             <svg className="mx-auto h-16 w-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -526,7 +477,7 @@ export default function MySessionsPage() {
           </div>
         ) : (
           <div>
-            {Object.entries(groupedSessions()).map(([monthYear, monthSessions]) => (
+            {Object.entries(groupedSessionsData).map(([monthYear, monthSessions]) => (
               <div key={monthYear} className="mb-8">
                 <h2 className="text-xl font-semibold text-white mb-4">{monthYear}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

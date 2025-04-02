@@ -22,6 +22,7 @@ interface PlayerStats {
       total: number;
       completed: number;
       cancelled: number;
+      affectedByCancellation: number;
       active: number;
     };
     total: number;
@@ -263,39 +264,105 @@ export default function PlayerCard({
               
               {/* Session Stats with hover effects */}
               <div className="mb-6">
-                <h4 className="text-gray-300 text-sm font-medium mb-3 px-1">Session Stats</h4>
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-white">{stats.sessions.total}</div>
-                    <div className="text-xs text-gray-400">Total</div>
-                  </div>
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-green-400">{stats.sessions.created.total}</div>
-                    <div className="text-xs text-gray-400">Created</div>
-                  </div>
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-red-400">
-                      {stats.sessions.created.cancelled}
+                <h4 className="text-gray-300 text-sm font-medium mb-3 px-1 flex items-center">
+                  <svg className="w-4 h-4 mr-1.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  Session Stats
+                </h4>
+                
+                <div className="bg-gray-800/50 rounded-xl p-3 border border-gray-700/30">
+                  {/* Total Sessions - Main Stat */}
+                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-700/30">
+                    <div className="text-gray-400 text-sm">Total Sessions</div>
+                    <div className="flex items-center">
+                      <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+                        {stats.sessions.total}
+                      </span>
                     </div>
-                    <div className="text-xs text-gray-400">Cancelled</div>
                   </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-blue-400">{stats.sessions.joined.total}</div>
-                    <div className="text-xs text-gray-400">Joined</div>
-                  </div>
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-yellow-400">
-                      {stats.sessions.created.completed + stats.sessions.joined.completed}
+                  
+                  {/* Session Stats Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Created */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-green-400">{stats.sessions.created.total}</div>
+                        <div className="text-xs text-gray-400">Created</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400">Completed</div>
-                  </div>
-                  <div className="bg-gray-700/50 hover:bg-gray-700/70 rounded-lg p-2 text-center transition-all duration-200 cursor-default">
-                    <div className="text-lg font-semibold text-purple-400">
-                      {stats.sessions.joined.cancelled || 0}
+                    
+                    {/* Joined */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-blue-400">{stats.sessions.joined.total}</div>
+                        <div className="text-xs text-gray-400">Joined</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400">Leaves</div>
+                    
+                    {/* Completed */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-yellow-400">
+                          {stats.sessions.created.completed + stats.sessions.joined.completed}
+                        </div>
+                        <div className="text-xs text-gray-400">Completed</div>
+                      </div>
+                    </div>
+                    
+                    {/* Cancelled */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-red-400">{stats.sessions.created.cancelled}</div>
+                        <div className="text-xs text-gray-400">Cancelled</div>
+                      </div>
+                    </div>
+                    
+                    {/* Left */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-purple-400">{stats.sessions.joined.cancelled || 0}</div>
+                        <div className="text-xs text-gray-400">Left</div>
+                      </div>
+                    </div>
+                    
+                    {/* Host Cancelled */}
+                    <div className="flex items-center space-x-3 bg-gray-700/20 rounded-lg p-2.5 hover:bg-gray-700/40 transition-all duration-200">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-900/50 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-orange-400">{stats.sessions.joined.affectedByCancellation || 0}</div>
+                        <div className="text-xs text-gray-400">Host Cancelled</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -13,16 +13,19 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.2.0",
     "@prisma/client": "^6.5.0",
     "@tailwindcss/forms": "^0.5.7",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.11",
     "@types/react-color": "^3.0.13",
     "@types/react-datepicker": "^6.2.0",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.16",
     "axios": "^1.8.4",
+    "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
@@ -31,6 +34,7 @@
     "jsonwebtoken": "^9.0.2",
     "next": "^13.5.11",
     "next-auth": "^4.24.11",
+    "node-cron": "^3.0.3",
     "pg": "^8.14.1",
     "postcss": "^8.4.33",
     "react": "^18.3.1",
@@ -44,11 +48,13 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "cross-env": "^7.0.3",
     "prisma": "^6.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"

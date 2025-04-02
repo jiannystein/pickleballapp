@@ -63,13 +63,26 @@ export async function PATCH(
       }
     });
 
-    // Log the cancel session activity
+    // Log the cancel session activity for the host
     await logUserActivity(user.userId, ActivityType.CANCEL_SESSION, request);
 
     // Get player IDs and notify all participants about the cancellation
     const playerIds = existingSession.players.map(player => player.id);
     if (playerIds.length > 0) {
       console.log(`Notifying ${playerIds.length} participants about session cancellation`);
+      
+      // Log SESSION_CANCELLED_BY_HOST activity for each participant
+      for (const playerId of playerIds) {
+        await logUserActivity(
+          playerId, 
+          ActivityType.SESSION_CANCELLED_BY_HOST,
+          request,
+          // We don't have access to participant's IP/UserAgent, so using those from the host
+          request.headers.get('x-forwarded-for') || '',
+          request.headers.get('user-agent') || ''
+        );
+      }
+      
       await notifySessionCancellation(
         playerIds,
         user.name,

@@ -35,11 +35,23 @@ export async function GET(
     
     const joinedSessions = Array.isArray(joinedSessionsRaw) ? joinedSessionsRaw : [];
     
+    // Count sessions that were cancelled by the host
+    const affectedByCancellation = joinedSessions.filter((s: any) => s.status === 'cancelled').length;
+    
+    // Get user's left session count from activities
+    const leftSessionsCount = await prisma.userActivity.count({
+      where: {
+        userId: userId,
+        activityType: 'LEAVE_SESSION'
+      }
+    });
+    
     // Count joined sessions by status
     const joinedByStatus = {
       total: joinedSessions.length,
       completed: joinedSessions.filter((s: any) => s.status === 'completed').length,
-      cancelled: joinedSessions.filter((s: any) => s.status === 'cancelled').length,
+      cancelled: leftSessionsCount, // Actual left count from activities
+      affectedByCancellation: affectedByCancellation, // Sessions cancelled by host
       active: joinedSessions.filter((s: any) => s.status === 'active' || s.status === 'pending').length
     };
     

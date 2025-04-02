@@ -72,8 +72,5 @@ export async function POST(request: NextRequest) {
 }
 
 // NextJS configuration for API routes
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}; 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; 

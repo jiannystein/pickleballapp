@@ -2,14 +2,21 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ImageUpload from '@/components/ImageUpload';
 
 export default function RequestLocation() {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [bookingUrl, setBookingUrl] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const router = useRouter();
+
+  const handleImageSelected = (file: File) => {
+    setPhotoFile(file);
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -17,16 +24,21 @@ export default function RequestLocation() {
     setIsSubmitting(true);
 
     try {
+      // Create FormData to send the file
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('address', address);
+      formData.append('instructions', instructions);
+      formData.append('bookingUrl', bookingUrl);
+      
+      // Add the photo file if selected
+      if (photoFile) {
+        formData.append('photo', photoFile);
+      }
+
       const res = await fetch('/api/locations/request', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          address,
-          instructions,
-        }),
+        body: formData, // Using FormData instead of JSON
       });
 
       const data = await res.json();
@@ -81,6 +93,26 @@ export default function RequestLocation() {
             required
             className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="e.g., 123 Main St, City, State"
+          />
+        </div>
+
+        <ImageUpload 
+          onImageSelected={handleImageSelected}
+          label="Location Photo (Optional)"
+          className="mb-2"
+        />
+
+        <div>
+          <label htmlFor="bookingUrl" className="block text-sm font-medium text-gray-300 mb-2">
+            Booking URL (Optional)
+          </label>
+          <input
+            type="text"
+            id="bookingUrl"
+            value={bookingUrl}
+            onChange={(e) => setBookingUrl(e.target.value)}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="e.g., https://booking-system.com/central-park-courts"
           />
         </div>
 

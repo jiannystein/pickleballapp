@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-import { mkdir } from 'fs/promises';
+import { uploadFile, deleteFile } from '@/lib/file-utils';
 
 export async function POST(
   request: Request,
@@ -25,12 +23,13 @@ export async function POST(
 
     const locationId = params.id;
 
-    // Check if location exists - use direct query
-    const location = await prisma.$queryRaw`
-      SELECT * FROM "Location" WHERE id = ${locationId}
-    `;
+    // Check if location exists
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { id: true, photoUrl: true }
+    });
 
-    if (!location || (Array.isArray(location) && location.length === 0)) {
+    if (!location) {
       return NextResponse.json(
         { error: 'Location not found' },
         { status: 404 }
@@ -51,29 +50,19 @@ export async function POST(
       );
     }
 
-    // Create unique filename
-    const timestamp = Date.now();
-    const extension = file.name.split('.').pop();
-    const filename = `location-${locationId}-${timestamp}.${extension}`;
-
-    // Ensure uploads directory exists
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'locations');
-    try {
-      await mkdir(uploadDir, { recursive: true });
-      await writeFile(join(uploadDir, filename), Buffer.from(await file.arrayBuffer()));
-    } catch (error) {
-      console.error('File write error:', error);
-      return NextResponse.json(
-        { error: 'Failed to save file' },
-        { status: 500 }
-      );
+    // Delete previous photo if it exists
+    if (location.photoUrl) {
+      await deleteFile(location.photoUrl);
     }
 
-    // Update location's photo URL in database - use direct query
-    const photoUrl = `/uploads/locations/${filename}`;
-    await prisma.$executeRaw`
-      UPDATE "Location" SET "photoUrl" = ${photoUrl} WHERE id = ${locationId}
-    `;
+    // Upload new photo
+    const photoUrl = await uploadFile(file, 'uploads/locations', `location-${locationId}`);
+
+    // Update location's photo URL in database
+    await prisma.location.update({
+      where: { id: locationId },
+      data: { photoUrl }
+    });
 
     return NextResponse.json({ photoUrl });
   } catch (error) {

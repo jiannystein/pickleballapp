@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import Image from 'next/image';
 import PlayerCard from './PlayerCard';
+
+// Debug flag to control logging
+const DEBUG = process.env.NODE_ENV === 'development' && false; // Set to true only when debugging
 
 interface UserAvatarProps {
   name: string;
@@ -13,7 +16,7 @@ interface UserAvatarProps {
   portalId?: string;
 }
 
-export default function UserAvatar({ 
+function UserAvatar({ 
   name, 
   imageUrl, 
   size = 40, 
@@ -24,16 +27,16 @@ export default function UserAvatar({
   portalId
 }: UserAvatarProps) {
   const [error, setError] = useState(false);
-  const [imageVersion, setImageVersion] = useState(Date.now());
+  const [imageVersion, setImageVersion] = useState(() => Date.now());
   
-  // Generate a completely new version number whenever imageUrl changes
+  // Generate a new version number only when imageUrl actually changes
   useEffect(() => {
     if (imageUrl) {
-      console.log('UserAvatar: URL changed to:', imageUrl);
+      if (DEBUG) console.log('UserAvatar: URL changed to:', imageUrl);
       setError(false);
       setImageVersion(Date.now());
     } else {
-      console.log('UserAvatar: No image URL provided for', name);
+      if (DEBUG) console.log('UserAvatar: No image URL provided for', name);
     }
   }, [imageUrl, name]);
 
@@ -47,7 +50,7 @@ export default function UserAvatar({
         .toUpperCase()
         .slice(0, 2);
   
-      console.log('UserAvatar: Showing initials for', name, ':', initials);
+      if (DEBUG) console.log('UserAvatar: Showing initials for', name, ':', initials);
   
       return (
         <div
@@ -59,15 +62,18 @@ export default function UserAvatar({
       );
     }
   
-    // Add robust cache busting to ensure latest image is displayed
-    const cacheBuster = imageVersion || Date.now();
+    // Add cache busting only when needed
+    const cacheBuster = imageVersion;
     // Force use of absolute URL to avoid path issues
-    const absoluteImageUrl = imageUrl.startsWith('http') ? imageUrl : `${window.location.origin}${imageUrl}`;
+    const absoluteImageUrl = imageUrl.startsWith('http') 
+      ? imageUrl 
+      : (typeof window !== 'undefined' ? `${window.location.origin}${imageUrl}` : imageUrl);
+    
     const imageSrc = absoluteImageUrl.includes('?') 
       ? `${absoluteImageUrl}&v=${cacheBuster}` 
       : `${absoluteImageUrl}?v=${cacheBuster}`;
   
-    console.log('UserAvatar: Rendering image with src:', imageSrc);
+    if (DEBUG) console.log('UserAvatar: Rendering image with src:', imageSrc);
   
     return (
       <div 
@@ -82,7 +88,6 @@ export default function UserAvatar({
           className="object-cover"
           onError={(e) => {
             console.error('UserAvatar: Image failed to load:', imageSrc);
-            console.error('UserAvatar: Error details:', e);
             setError(true);
           }}
           priority
@@ -108,4 +113,14 @@ export default function UserAvatar({
       {renderAvatar()}
     </PlayerCard>
   );
-} 
+}
+
+// Export a memoized version to prevent unnecessary re-renders
+export default memo(UserAvatar, (prevProps, nextProps) => {
+  // Only re-render if these props change
+  return prevProps.name === nextProps.name && 
+         prevProps.imageUrl === nextProps.imageUrl &&
+         prevProps.size === nextProps.size &&
+         prevProps.userId === nextProps.userId &&
+         prevProps.showPlayerCard === nextProps.showPlayerCard;
+}); 

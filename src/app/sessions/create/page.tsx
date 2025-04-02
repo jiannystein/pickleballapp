@@ -15,6 +15,14 @@ interface Location {
   bookingUrl?: string;
 }
 
+// Add this function to create a shared event for session updates
+function createSessionCreatedEvent() {
+  const sessionCreatedEvent = new CustomEvent('session-created', {
+    detail: { timestamp: new Date().getTime() }
+  });
+  window.dispatchEvent(sessionCreatedEvent);
+}
+
 export default function CreateSession() {
   const router = useRouter();
   const [error, setError] = useState('');
@@ -112,7 +120,6 @@ export default function CreateSession() {
       return;
     }
     
-    // Use our timezone-aware function to create the ISO string
     const dateString = createLocalISOString(dateTime);
     
     const sessionData = {
@@ -142,6 +149,10 @@ export default function CreateSession() {
         throw new Error(responseData.error || 'Failed to create session');
       }
 
+      // Dispatch the event to notify other components that a session was created
+      createSessionCreatedEvent();
+      
+      // Navigate to sessions page
       router.push('/sessions');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -150,28 +161,26 @@ export default function CreateSession() {
     }
   }
 
-  // Update this function to only check if date is in the future
   const isDateTimeValid = (date: Date) => {
     const now = new Date();
     return date > now;
   };
   
-  // Update isDateInPast function to only compare dates (not times)
   const isDateInPast = (date: Date) => {
     const now = new Date();
     
-    // Compare only the date parts (year, month, day)
     const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const compareDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
-    return compareDate < nowDate;
+    const maxDate = new Date(nowDate);
+    maxDate.setDate(nowDate.getDate() + 14);
+    
+    return compareDate < nowDate || compareDate > maxDate;
   };
   
-  // Keep the filterTime function to only filter times in the past
   const filterTime = (time: Date) => {
     const now = new Date();
     
-    // For today's date, only filter times in the past
     const isToday = time.getDate() === now.getDate() && 
                    time.getMonth() === now.getMonth() && 
                    time.getFullYear() === now.getFullYear();
@@ -180,22 +189,17 @@ export default function CreateSession() {
       return time > now;
     }
     
-    // For future dates, allow all times
     return true;
   };
   
-  // Keep the formatTime function
   const formatTime = (time: Date) => {
     return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Updated version of the date/time setting function
   const handleDateChange = (date: Date | null) => {
     if (date) {
-      // Check if the selected date is in the future
       const isValid = isDateTimeValid(date);
       setInvalidDateSelected(!isValid);
-      // Only update the dateTime if it's valid
       if (isValid) {
         setDateTime(date);
       }
@@ -360,7 +364,7 @@ export default function CreateSession() {
                 </p>
               ) : (
                 <p className="mt-1 text-xs text-gray-400">
-                  Select any future date and time for your session.
+                  Select a date within the next 14 days.
                 </p>
               )}
             </div>

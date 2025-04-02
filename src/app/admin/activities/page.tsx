@@ -43,8 +43,8 @@ export default function UserActivities() {
   // Filter states
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [activityType, setActivityType] = useState<string>('');
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   
   const router = useRouter();
 
@@ -57,6 +57,8 @@ export default function UserActivities() {
     { value: 'JOIN_SESSION', label: 'Join Session' },
     { value: 'DELETE_SESSION', label: 'Delete Session' },
     { value: 'LEAVE_SESSION', label: 'Leave Session' },
+    { value: 'CANCEL_SESSION', label: 'Cancel Session' },
+    { value: 'SESSION_CANCELLED_BY_HOST', label: 'Session Cancelled By Host' },
     { value: 'ADD_FEEDBACK', label: 'Add Feedback' },
     { value: 'PASSWORD_RESET', label: 'Password Reset' },
     { value: 'PROFILE_UPDATE', label: 'Profile Update' }
@@ -135,8 +137,8 @@ export default function UserActivities() {
   function resetFilters() {
     setSelectedUser('');
     setActivityType('');
-    setStartDate(null);
-    setEndDate(null);
+    setStartDate(undefined);
+    setEndDate(undefined);
     
     // Reset to first page
     setPagination(prev => ({
@@ -229,7 +231,7 @@ export default function UserActivities() {
               <DatePicker
                 id="startDate"
                 selected={startDate}
-                onChange={(date: Date | null) => setStartDate(date)}
+                onChange={(date: Date | null) => setStartDate(date || undefined)}
                 selectsStart
                 startDate={startDate}
                 endDate={endDate}
@@ -245,7 +247,7 @@ export default function UserActivities() {
               <DatePicker
                 id="endDate"
                 selected={endDate}
-                onChange={(date: Date | null) => setEndDate(date)}
+                onChange={(date: Date | null) => setEndDate(date || undefined)}
                 selectsEnd
                 startDate={startDate}
                 endDate={endDate}
