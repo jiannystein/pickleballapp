@@ -1,8 +1,12 @@
 #!/bin/bash
+# PickleBall App Setup for Ubuntu
 
-echo "==================================================="
-echo "PickleBall App Setup Script"
-echo "==================================================="
+# Set colors
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Setting up PickleBall App...${NC}"
 
 # Check if .env file exists
 if [ ! -f .env ]; then
@@ -14,7 +18,7 @@ fi
 echo "Setting up your PickleBall development environment..."
 
 # Install dependencies
-echo "[1/5] Installing dependencies..."
+echo -e "${CYAN}Installing dependencies...${NC}"
 npm install
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install dependencies."
@@ -22,7 +26,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Generate Prisma client
-echo "[2/5] Generating Prisma client..."
+echo -e "${CYAN}Generating Prisma client...${NC}"
 npx prisma generate
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to generate Prisma client."
@@ -30,7 +34,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Push schema to database
-echo "[3/5] Setting up database schema..."
+echo -e "${CYAN}Pushing schema to database...${NC}"
 npx prisma db push
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to push database schema."
@@ -39,15 +43,19 @@ if [ $? -ne 0 ]; then
 fi
 
 # Seed the database
-echo "[4/5] Seeding database with initial data..."
+echo -e "${CYAN}Seeding database...${NC}"
 npx prisma db seed
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to seed the database."
     exit 1
 fi
 
+# Initialize reviews
+echo -e "${CYAN}Initializing reviews...${NC}"
+node src/scripts/initialize-reviews.js
+
 # Create start script
-echo "[5/5] Creating development starter script..."
+echo -e "${CYAN}Creating development starter script...${NC}"
 cat > start-dev.sh << 'EOL'
 #!/bin/bash
 echo "Starting PickleBall App development server..."
@@ -57,18 +65,13 @@ EOL
 # Make the start script executable
 chmod +x start-dev.sh
 
-echo "==================================================="
-echo "Setup complete! Your environment is ready."
-echo "==================================================="
+echo -e "${GREEN}Setup complete! You can now run ./start-dev.sh to start the development server.${NC}"
 echo
 echo "Default admin credentials:"
 echo "Email: admin@example.com"
 echo "Password: admin123"
 echo
 echo "IMPORTANT: Please change the admin password immediately after first login!"
-echo
-echo "To start the development server, run:"
-echo "  ./start-dev.sh"
 echo
 echo "To manually start the server:"
 echo "  npm run dev"

@@ -25,9 +25,11 @@ A modern web application for connecting pickleball enthusiasts, managing session
 - PostgreSQL 12.x or later
 - npm package manager
 
-## PowerShell Scripts for Easy Setup
+## Convenience Scripts
 
-We provide PowerShell scripts for easy setup and management:
+We provide scripts for easy setup and management for both Windows and Ubuntu:
+
+### Windows (PowerShell)
 
 | Script | Description |
 |--------|-------------|
@@ -40,7 +42,7 @@ We provide PowerShell scripts for easy setup and management:
 | `initialize-reviews.ps1` | Initializes player reviews |
 | `cleanup-bat-files.ps1` | Removes redundant .bat files |
 
-To use these scripts:
+To use PowerShell scripts:
 
 1. Ensure PowerShell execution policy allows running scripts:
    ```powershell
@@ -52,7 +54,35 @@ To use these scripts:
    .\script-name.ps1
    ```
 
-## Quick Start (Windows)
+### Ubuntu (Bash)
+
+| Script | Description |
+|--------|-------------|
+| `install-prerequisites.sh` | Checks and installs prerequisites |
+| `setup.sh` | One-command setup: installs dependencies, sets up database |
+| `start-dev.sh` | Starts the development server |
+| `prisma-push.sh` | Pushes database schema changes |
+| `seed-db.sh` | Seeds the database with initial data |
+| `reset-db.sh` | Resets the database (caution: deletes all data) |
+| `initialize-reviews.sh` | Initializes player reviews |
+| `cleanup-sh-files.sh` | Removes redundant shell files |
+| `make-executable.sh` | Makes all shell scripts executable |
+
+To use Bash scripts:
+
+1. Make scripts executable:
+   ```bash
+   chmod +x *.sh
+   ```
+
+2. Run any script by typing:
+   ```bash
+   ./script-name.sh
+   ```
+
+## Quick Start Guide
+
+### Windows Setup
 
 1. **Clone the repository**:
    ```
@@ -77,6 +107,38 @@ To use these scripts:
    ```
 
 5. **Access the application** at [http://localhost:3000](http://localhost:3000)
+
+### Ubuntu Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/pickleballapp.git
+   cd pickleballapp
+   ```
+
+2. **Make scripts executable**:
+   ```bash
+   chmod +x make-executable.sh
+   ./make-executable.sh
+   ```
+
+3. **Check prerequisites**:
+   ```bash
+   ./install-prerequisites.sh
+   ```
+   This script will check for Node.js and PostgreSQL, install them if needed, and create a template .env file.
+
+4. **Run the setup script**:
+   ```bash
+   ./setup.sh
+   ```
+
+5. **Start the development server**:
+   ```bash
+   ./start-dev.sh
+   ```
+
+6. **Access the application** at [http://localhost:3000](http://localhost:3000)
 
 ### Default Admin Account
 
@@ -130,7 +192,9 @@ Before pushing your code to a git repository:
 
 ## Troubleshooting
 
-### PowerShell Execution Issues
+### Windows-Specific Issues
+
+#### PowerShell Execution Issues
 
 If you encounter an error about script execution:
 ```
@@ -142,301 +206,48 @@ Run this command in PowerShell as Administrator:
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
-### Port Already in Use
+#### Port Already in Use
 
 If port 3000 is already in use, the application will try to use port 3001. You can manually specify a port:
 ```powershell
 $env:PORT=3002; .\start-dev.ps1
 ```
 
-### Database Connection Issues
-
-If you encounter database connection issues:
-1. Check that PostgreSQL is running
-2. Verify your `.env` file contains the correct connection string
-3. Try running `.\prisma-push.ps1` to ensure the schema is properly pushed
-
-### Path Casing Issues
+#### Path Casing Issues
 
 If you encounter warnings about casing in file paths, ensure your project folder uses consistent casing. See `migration-guide.md` for detailed instructions.
 
-## Ubuntu Setup
+### Ubuntu-Specific Issues
 
-1. **Update system packages**:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
+#### Permission Denied
 
-2. **Install Node.js and npm**:
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-   sudo apt install -y nodejs
-   ```
+If you see "Permission denied" when trying to run scripts:
+```bash
+chmod +x *.sh  # Make all scripts executable
+```
 
-3. **Install PostgreSQL**:
-   ```bash
-   sudo apt install postgresql postgresql-contrib
-   ```
+#### PostgreSQL Connection Issues
 
-4. **Configure PostgreSQL**:
-   ```bash
-   sudo -u postgres psql
-   ```
-   
-   Inside the PostgreSQL shell:
-   ```sql
-   CREATE USER youruser WITH PASSWORD 'yourpassword';
-   CREATE DATABASE pickleball;
-   GRANT ALL PRIVILEGES ON DATABASE pickleball TO youruser;
-   \q
-   ```
+If you can't connect to PostgreSQL:
+```bash
+# Check if PostgreSQL is running
+sudo systemctl status postgresql
 
-5. **Clone and setup the application**:
-   ```bash
-   git clone https://github.com/yourusername/PickleBallApp.git
-   cd PickleBallApp
-   npm install
-   ```
+# Start PostgreSQL if needed
+sudo systemctl start postgresql
+```
 
-6. **Set up environment variables**:
-   ```bash
-   cat > .env << EOL
-   DATABASE_URL="postgresql://youruser:yourpassword@localhost:5432/pickleball?schema=public"
-   NEXTAUTH_SECRET="your-nextauth-secret"
-   JWT_SECRET="your-jwt-secret"
-   NEXTAUTH_URL="http://localhost:3000"
-   EOL
-   ```
+#### Node Version Management
 
-7. **Initialize the database**:
-   ```bash
-   npx prisma migrate dev --name init
-   npx prisma db seed
-   ```
+If you need a specific Node.js version:
+```bash
+# Install NVM (Node Version Manager)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
 
-8. **Create a start script** (optional):
-   Create a file named `start-dev.sh` in the project root:
-   ```bash
-   #!/bin/bash
-   echo "Starting PickleBall App development server..."
-   npm run dev
-   ```
-   
-   Make it executable:
-   ```bash
-   chmod +x start-dev.sh
-   ```
-
-9. **Start the development server**:
-   ```bash
-   ./start-dev.sh
-   ```
-   
-   Or run directly:
-   ```bash
-   npm run dev
-   ```
-
-10. **Access the application** at [http://localhost:3000](http://localhost:3000)
-
-## Exposing Local Development with Cloudflare Tunnel
-
-You can expose your local development environment to the internet using Cloudflare Tunnel:
-
-1. **Sign up for a Cloudflare account** at [cloudflare.com](https://cloudflare.com)
-
-2. **Install cloudflared**:
-   - Windows: Download from [Cloudflare's website](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
-   - Ubuntu:
-     ```bash
-     curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-     sudo dpkg -i cloudflared.deb
-     ```
-
-3. **Log in to Cloudflare**:
-   ```bash
-   cloudflared tunnel login
-   ```
-
-4. **Create a tunnel**:
-   ```bash
-   cloudflared tunnel create pickleball-app
-   ```
-
-5. **Configure the tunnel** by creating a `config.yml` file:
-   ```yaml
-   tunnel: <YOUR-TUNNEL-ID>
-   credentials-file: <PATH-TO-CREDENTIALS-JSON>
-   
-   ingress:
-     - hostname: pickleball-app.yourdomain.com
-       service: http://localhost:3000
-     - service: http_status:404
-   ```
-
-6. **Route traffic to your tunnel**:
-   ```bash
-   cloudflared tunnel route dns pickleball-app pickleball-app.yourdomain.com
-   ```
-
-7. **Start the tunnel**:
-   ```bash
-   cloudflared tunnel run pickleball-app
-   ```
-
-Your local development server will now be accessible at `https://pickleball-app.yourdomain.com`.
-
-## Production Deployment
-
-### Self-Hosting on Ubuntu Server
-
-1. **Update system packages**:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
-
-2. **Install Node.js and npm**:
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-   sudo apt install -y nodejs
-   ```
-
-3. **Install PostgreSQL**:
-   ```bash
-   sudo apt install postgresql postgresql-contrib
-   ```
-
-4. **Configure PostgreSQL**:
-   ```bash
-   sudo -u postgres createuser -P youruser
-   sudo -u postgres createdb -O youruser pickleball
-   ```
-
-5. **Clone and setup the application**:
-   ```bash
-   git clone https://github.com/yourusername/PickleBallApp.git
-   cd PickleBallApp
-   npm install
-   ```
-
-6. **Set up environment variables**:
-   ```bash
-   nano .env
-   # Add your environment variables similar to the local setup
-   ```
-
-7. **Initialize the database**:
-   ```bash
-   npx prisma migrate deploy
-   npx prisma db seed
-   ```
-
-8. **Build and start the application**:
-   ```bash
-   npm run build
-   npm start
-   ```
-
-9. **Set up Nginx as reverse proxy**:
-   ```bash
-   sudo apt install nginx
-   sudo nano /etc/nginx/sites-available/pickleballapp
-   ```
-   
-   Add this configuration:
-   ```nginx
-   server {
-       listen 80;
-       server_name your_domain.com;
-
-       location / {
-           proxy_pass http://localhost:3000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-       }
-   }
-   ```
-
-10. **Enable the site and restart Nginx**:
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/pickleballapp /etc/nginx/sites-enabled/
-    sudo nginx -t
-    sudo systemctl restart nginx
-    ```
-
-11. **Set up SSL with Let's Encrypt**:
-    ```bash
-    sudo apt install certbot python3-certbot-nginx
-    sudo certbot --nginx -d your_domain.com
-    ```
-
-12. **Set up process manager (PM2)**:
-    ```bash
-    sudo npm install -g pm2
-    pm2 start npm --name "pickleballapp" -- start
-    pm2 startup
-    pm2 save
-    ```
-
-### Self-Hosting on Windows Server
-
-1. **Install Node.js**:
-   - Download and install from [nodejs.org](https://nodejs.org/)
-   - Recommended: Use Node.js 18.x LTS version
-
-2. **Install PostgreSQL**:
-   - Download and install from [postgresql.org](https://www.postgresql.org/download/windows/)
-
-3. **Install IIS**:
-   - Enable IIS from Windows Features
-   - Install URL Rewrite Module
-
-4. **Clone and setup the application**:
-   ```
-   git clone https://github.com/yourusername/PickleBallApp.git
-   cd PickleBallApp
-   npm install
-   ```
-
-5. **Set up environment variables**:
-   - Create a `.env` file as in the local setup
-
-6. **Initialize the database**:
-   ```
-   npx prisma migrate deploy
-   npx prisma db seed
-   ```
-
-7. **Build the application**:
-   ```
-   npm run build
-   ```
-
-8. **Create a startup script** (required for Windows):
-   Create `start-prod.bat`:
-   ```bat
-   @echo off
-   echo Starting PickleBall App production server...
-   cd /d %~dp0
-   npm start
-   pause
-   ```
-
-9. **Install and configure iisnode**:
-   - Follow the instructions at [iisnode.net](https://github.com/Azure/iisnode)
-   - Create a web.config file for IIS integration
-
-10. **Set up process manager (PM2)**:
-    ```
-    npm install -g pm2-windows-startup
-    npm install -g pm2
-    pm2-startup install
-    pm2 start npm --name "pickleballapp" -- start
-    pm2 save
-    ```
+# Install and use Node.js 18
+nvm install 18
+nvm use 18
+```
 
 ## Environment Variables
 
