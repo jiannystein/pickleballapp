@@ -60,12 +60,12 @@ export default function MySessionsPage() {
   
   // Use our custom hook for pending reviews
   const { pendingReviewsCount, pendingSessions } = usePendingReviews();
-  
+
   // Simple function to determine if a date is in the past
   const isPast = useCallback((dateString: string) => {
     return new Date(dateString) < new Date();
   }, []);
-  
+
   // Simple function to determine if a date is in the future
   const isFuture = useCallback((dateString: string) => {
     return new Date(dateString) > new Date();
@@ -98,20 +98,20 @@ export default function MySessionsPage() {
       
       // Get the current user ID if not already set
       if (!currentUserId) {
-        const userRes = await fetch('/api/auth/me');
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          setCurrentUserId(userData.userId);
+      const userRes = await fetch('/api/auth/me');
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setCurrentUserId(userData.userId);
         }
-      }
-      
+  }
+  
       // Process sessions to mark completed ones
       const now = new Date();
       const processedSessions = data.map((session: Session) => {
         // If the session has ended and not cancelled/completed, mark as completed
         if (session.status !== 'cancelled' && session.status !== 'completed') {
           if (isSessionEnded(session)) {
-            return { ...session, status: 'completed' };
+          return { ...session, status: 'completed' };
           }
         }
         return session;
@@ -122,16 +122,16 @@ export default function MySessionsPage() {
         const pendingSessionIds = new Set(pendingSessions.map(session => session.id));
         
         const finalSessions = processedSessions.map((session: Session) => {
-          if (pendingSessionIds.has(session.id)) {
-            return { ...session, pendingReviews: true };
-          }
-          if (session.status === 'completed' || new Date(session.date) < now) {
-            return { ...session, pendingReviews: false };
-          }
-          return session;
-        });
-        
-        setSessions(finalSessions);
+        if (pendingSessionIds.has(session.id)) {
+          return { ...session, pendingReviews: true };
+        }
+        if (session.status === 'completed' || new Date(session.date) < now) {
+          return { ...session, pendingReviews: false };
+        }
+        return session;
+      });
+      
+      setSessions(finalSessions);
       } else {
         setSessions(processedSessions);
       }
@@ -243,7 +243,7 @@ export default function MySessionsPage() {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
     }
-    
+
     return filtered;
   }, [sessions, activeTab, isSessionEnded, isFuture]);
 
@@ -397,12 +397,12 @@ export default function MySessionsPage() {
                 <span className="ml-2 text-gray-500">(refreshes every 15s)</span>
               </p>
             )}
-            <Link
-              href="/sessions/create"
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
-            >
-              Create Session
-            </Link>
+          <Link
+            href="/sessions/create"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            Create Session
+          </Link>
           </div>
         </div>
 
@@ -425,16 +425,16 @@ export default function MySessionsPage() {
             Upcoming
           </button>
           <div className="relative">
-            <button
-              onClick={() => setActiveTab('completed')}
-              className={`py-2 px-4 font-medium text-sm focus:outline-none ${
-                activeTab === 'completed' 
-                  ? 'text-indigo-400 border-b-2 border-indigo-400' 
-                  : 'text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              Completed
-            </button>
+          <button
+            onClick={() => setActiveTab('completed')}
+            className={`py-2 px-4 font-medium text-sm focus:outline-none ${
+              activeTab === 'completed' 
+                ? 'text-indigo-400 border-b-2 border-indigo-400' 
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            Completed
+          </button>
             {pendingReviewsCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
                 {pendingReviewsCount}

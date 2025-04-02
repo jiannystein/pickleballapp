@@ -25,76 +25,142 @@ A modern web application for connecting pickleball enthusiasts, managing session
 - PostgreSQL 12.x or later
 - npm package manager
 
-## Local Development Setup
+## PowerShell Scripts for Easy Setup
 
-### Windows Setup
+We provide PowerShell scripts for easy setup and management:
+
+| Script | Description |
+|--------|-------------|
+| `install-prerequisites.ps1` | Checks and installs prerequisites |
+| `setup.ps1` | One-command setup: installs dependencies, sets up database |
+| `start-dev.ps1` | Starts the development server |
+| `prisma-push.ps1` | Pushes database schema changes |
+| `seed-db.ps1` | Seeds the database with initial data |
+| `reset-db.ps1` | Resets the database (caution: deletes all data) |
+| `initialize-reviews.ps1` | Initializes player reviews |
+| `cleanup-bat-files.ps1` | Removes redundant .bat files |
+
+To use these scripts:
+
+1. Ensure PowerShell execution policy allows running scripts:
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+   ```
+
+2. Run any script by right-clicking it and selecting "Run with PowerShell" or by typing:
+   ```powershell
+   .\script-name.ps1
+   ```
+
+## Quick Start (Windows)
 
 1. **Clone the repository**:
    ```
-   git clone https://github.com/yourusername/PickleBallApp.git
-   cd PickleBallApp
+   git clone https://github.com/yourusername/pickleballapp.git
+   cd pickleballapp
    ```
 
-2. **Install dependencies**:
-   ```
-   npm install
-   ```
-
-3. **Install PostgreSQL**:
-   - Download and install PostgreSQL from [postgresql.org](https://www.postgresql.org/download/windows/)
-   - During installation, set a password for the postgres user
-   - Keep the default port (5432)
-
-4. **Create a database**:
-   - Open pgAdmin (installed with PostgreSQL)
-   - Create a new database named "pickleball"
-
-5. **Setup environment variables**:
-   - Create a `.env` file in the project root with the following:
-   ```
-   DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/pickleball?schema=public"
-   NEXTAUTH_SECRET="your-nextauth-secret"
-   JWT_SECRET="your-jwt-secret"
-   NEXTAUTH_URL="http://localhost:3000"
-   ```
-
-6. **Initialize the database**:
-   ```
-   npx prisma migrate dev --name init
-   npx prisma db seed
-   ```
-
-7. **Create a start batch file** (strongly recommended for Windows):
-   Create a file named `start-dev.bat` in the project root with the following content:
-   ```bat
-   @echo off
-   echo Starting PickleBall App development server...
-   cd /d %~dp0
-   npm run dev
-   pause
-   ```
-
-   This batch file helps avoid common Windows issues:
-   - PowerShell doesn't support the `&&` operator like Command Prompt
-   - Ensures proper directory context for running Next.js
-   - Avoids some permission-related errors
-
-8. **Start the development server**:
-   - Option 1 (Recommended): Double-click the `start-dev.bat` file
-   - Option 2: Run in Command Prompt (cmd.exe, not PowerShell):
-   ```
-   npm run dev
-   ```
-   
-   Note: If using PowerShell, run commands separately:
+2. **Check prerequisites**:
    ```powershell
-   cd "C:\path\to\PickleBallApp"
-   npm run dev
+   .\install-prerequisites.ps1
+   ```
+   This script will check for Node.js and PostgreSQL and create a template .env file.
+
+3. **Run the setup script**:
+   ```powershell
+   .\setup.ps1
    ```
 
-9. **Access the application** at [http://localhost:3000](http://localhost:3000)
+4. **Start the development server**:
+   ```powershell
+   .\start-dev.ps1
+   ```
 
-### Ubuntu Setup
+5. **Access the application** at [http://localhost:3000](http://localhost:3000)
+
+### Default Admin Account
+
+After running the setup script, you can access the admin dashboard with:
+
+- **Email**: admin@example.com
+- **Password**: admin123
+
+⚠️ **SECURITY WARNING**: Change the admin password immediately after your first login.
+
+To change the admin password:
+1. Login with the default credentials
+2. Navigate to your profile settings
+3. Update your password with a strong, unique alternative
+
+## Security Considerations
+
+### Sensitive Files
+
+This repository contains several sensitive files that should not be committed to version control:
+
+1. **Environment Files**:
+   - `.env` - Contains database credentials and secret keys
+   - `.env.local`, `.env.development`, `.env.production` - Environment-specific configs
+
+2. **Sensitive Source Files**:
+   - `src/lib/env.ts` - Contains fallback credentials and secrets
+   - `src/lib/init-admin.ts` - Contains admin initialization logic
+
+For each of these files, we provide an example template (`.example` extension) that you should copy and modify with your actual values.
+
+### Before Pushing to Git
+
+Before pushing your code to a git repository:
+
+1. **Verify Sensitive Files Are Ignored**:
+   ```bash
+   git status
+   ```
+   Ensure sensitive files are not listed as tracked or staged.
+
+2. **If Sensitive Files Are Already Tracked**:
+   ```bash
+   git rm --cached .env
+   git rm --cached src/lib/env.ts
+   git rm --cached src/lib/init-admin.ts
+   ```
+
+3. **Verify Your .gitignore**:
+   The repository includes a comprehensive `.gitignore` file that should prevent sensitive files from being committed.
+
+## Troubleshooting
+
+### PowerShell Execution Issues
+
+If you encounter an error about script execution:
+```
+...cannot be loaded because running scripts is disabled on this system...
+```
+
+Run this command in PowerShell as Administrator:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+### Port Already in Use
+
+If port 3000 is already in use, the application will try to use port 3001. You can manually specify a port:
+```powershell
+$env:PORT=3002; .\start-dev.ps1
+```
+
+### Database Connection Issues
+
+If you encounter database connection issues:
+1. Check that PostgreSQL is running
+2. Verify your `.env` file contains the correct connection string
+3. Try running `.\prisma-push.ps1` to ensure the schema is properly pushed
+
+### Path Casing Issues
+
+If you encounter warnings about casing in file paths, ensure your project folder uses consistent casing. See `migration-guide.md` for detailed instructions.
+
+## Ubuntu Setup
 
 1. **Update system packages**:
    ```bash
@@ -383,44 +449,6 @@ Required environment variables:
 Optional environment variables:
 - `NEXT_PUBLIC_APP_URL`: Public URL of your application
 - `PORT`: Port number (default: 3000)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Issues**:
-   - Verify your PostgreSQL service is running
-   - Check your DATABASE_URL for typos
-   - Ensure the database user has correct permissions
-
-2. **Next.js Build Errors**:
-   - Run `npx next lint` to check for linting errors
-   - Clear the .next folder: `rm -rf .next` (Linux/Mac) or `rmdir /s /q .next` (Windows)
-
-3. **Node Version Issues**:
-   - Use Node.js 18.x LTS instead of the latest version (22.x may cause issues)
-   - If using Node.js 22.x, you might encounter EPERM errors with Next.js
-   - Try using NVM to manage Node versions: `nvm install 18.17.0` and `nvm use 18.17.0`
-
-4. **Port Already In Use**:
-   - If you see `Port 3000 is in use, trying 3001 instead`, check for other running instances
-   - Kill any running node processes: `taskkill /F /IM node.exe` (Windows) or `pkill node` (Linux)
-
-5. **Windows PowerShell '&&' Operator Issues**:
-   - PowerShell doesn't support the '&&' operator like Command Prompt does
-   - Use the provided batch file (`start-dev.bat`) to avoid this issue
-   - If you must use PowerShell, run commands separately with `;` as separator
-
-6. **EPERM Errors on Windows**:
-   - Common error: `[Error: EPERM: operation not permitted, open '.next/trace']`
-   - Run Command Prompt or PowerShell as Administrator
-   - Temporarily disable antivirus software
-   - Delete the `.next` folder and try again: `rmdir /s /q .next`
-   - Use the batch file which helps avoid some permission-related issues
-
-7. **Permission Denied on Ubuntu**:
-   - Ensure you have the right permissions for the project folder
-   - Use 'sudo' for global npm installations
 
 ## Contributing
 
