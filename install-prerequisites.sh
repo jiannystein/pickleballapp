@@ -96,3 +96,4 @@ echo -e "${CYAN}Next steps:${NC}"
 echo -e "1. Update the .env file with your database credentials"
 echo -e "2. Run ${YELLOW}./setup.sh${NC} to set up the application"
 echo -e "3. Run ${YELLOW}./start-dev.sh${NC} to start the development server"
+

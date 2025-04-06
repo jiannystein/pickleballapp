@@ -36,3 +36,4 @@ echo -e "  - prisma-push.sh"
 echo -e "  - seed-db.sh"
 echo -e "  - reset-db.sh"
 echo -e "  - initialize-reviews.sh"
+

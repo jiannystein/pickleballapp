@@ -16,3 +16,4 @@ echo -e "${GREEN}Resetting database...${NC}"
 
 # Reset database
 npx prisma migrate reset --force
+

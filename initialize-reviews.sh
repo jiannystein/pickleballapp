@@ -10,3 +10,4 @@ echo -e "${GREEN}Initializing reviews...${NC}"
 
 # Initialize reviews
 node src/scripts/initialize-reviews.js
+

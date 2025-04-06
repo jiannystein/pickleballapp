@@ -16,3 +16,4 @@ echo -e "${GREEN}All shell scripts are now executable!${NC}"
 # List executable scripts
 echo -e "${YELLOW}Executable scripts in this directory:${NC}"
 ls -l *.sh
+

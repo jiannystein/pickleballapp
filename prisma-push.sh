@@ -10,3 +10,4 @@ echo -e "${GREEN}Pushing Prisma schema to database...${NC}"
 
 # Push schema to database
 npx prisma db push
+

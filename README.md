@@ -365,4 +365,137 @@ Before pushing your code to a git repository:
    ```
 
 3. **Verify Your .gitignore**:
-   The repository includes a comprehensive `.gitignore` file that should prevent sensitive files from being committed. 
+   The repository includes a comprehensive `.gitignore` file that should prevent sensitive files from being committed.
+
+## Database Setup
+
+### PostgreSQL Setup
+
+The application uses PostgreSQL as its database. You'll need to:
+
+1. **Install PostgreSQL** if not already installed:
+   - Windows: Download from https://www.postgresql.org/download/windows/
+   - Ubuntu: `sudo apt install postgresql postgresql-contrib`
+
+2. **Create databases**:
+   ```sql
+   CREATE DATABASE pickleball;
+   CREATE DATABASE pickleball_shadow;  -- Optional: For Prisma migrations
+   ```
+
+3. **Create a user and grant permissions**:
+   ```sql
+   CREATE USER youruser WITH PASSWORD 'yourpassword';
+   GRANT ALL PRIVILEGES ON DATABASE pickleball TO youruser;
+   GRANT ALL PRIVILEGES ON DATABASE pickleball_shadow TO youruser;
+   ```
+
+4. **Grant schema permissions**:
+   ```sql
+   \c pickleball
+   GRANT ALL ON SCHEMA public TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO youruser;
+   
+   \c pickleball_shadow
+   GRANT ALL ON SCHEMA public TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO youruser;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO youruser;
+   ```
+
+5. **Update your .env file**:
+   ```
+   DATABASE_URL=postgresql://youruser:yourpassword@localhost:5432/pickleball?schema=public
+   ```
+
+### Prisma Migrations
+
+When running migrations with `npx prisma migrate dev`, Prisma needs permission to create a shadow database. You have two options:
+
+1. **Grant CREATEDB permission to your user** (recommended):
+   ```sql
+   ALTER USER youruser WITH CREATEDB;
+   ```
+
+2. **Use a pre-created shadow database**:
+   - Add this to your `prisma/schema.prisma` file:
+     ```prisma
+     datasource db {
+       provider = "postgresql"
+       url      = env("DATABASE_URL")
+       shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+     }
+     ```
+   - Add this to your `.env` file:
+     ```
+     SHADOW_DATABASE_URL=postgresql://youruser:yourpassword@localhost:5432/pickleball_shadow?schema=public
+     ```
+
+If you encounter permission errors, ensure your database user has sufficient privileges.
+
+# Database Connection
+DATABASE_URL=postgresql://username:password@localhost:5432/databasename?schema=public
+DIRECT_URL=postgresql://username:password@localhost:5432/databasename?schema=public
+# Optional: For Prisma migrations, used as a shadow database
+# SHADOW_DATABASE_URL=postgresql://username:password@localhost:5432/databasename_shadow?schema=public
+
+# Authentication
+NEXTAUTH_SECRET=your_nextauth_secret_here
+JWT_SECRET=your_jwt_secret_here
+NEXTAUTH_URL=http://localhost:3000
+
+# Admin Account
+DEFAULT_ADMIN_PASSWORD=admin123
+
+# Optional Settings
+# PORT=3000
+# NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Optional: Social Login (if implemented)
+# GITHUB_ID=""
+# GITHUB_SECRET=""
+# GOOGLE_ID=""
+# GOOGLE_SECRET=""
+
+// Ensure environment variables are available
+// This is a workaround for the issue where Next.js doesn't consistently load .env files
+
+// Database connection
+export const DATABASE_URL = process.env.DATABASE_URL || '';
+export const DIRECT_URL = process.env.DIRECT_URL || '';
+
+// Auth secrets
+export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || '';
+export const JWT_SECRET = process.env.JWT_SECRET || '';
+
+// Make sure all environment variables are available if not set
+if (!process.env.DATABASE_URL && DATABASE_URL) {
+  process.env.DATABASE_URL = DATABASE_URL;
+}
+
+if (!process.env.DIRECT_URL && DIRECT_URL) {
+  process.env.DIRECT_URL = DIRECT_URL;
+}
+
+if (!process.env.NEXTAUTH_SECRET && NEXTAUTH_SECRET) {
+  process.env.NEXTAUTH_SECRET = NEXTAUTH_SECRET;
+}
+
+if (!process.env.JWT_SECRET && JWT_SECRET) {
+  process.env.JWT_SECRET = JWT_SECRET;
+}
+
+// Export a function to load environment variables
+export function loadEnv() {
+  return {
+    DATABASE_URL,
+    DIRECT_URL,
+    NEXTAUTH_SECRET,
+    JWT_SECRET
+  };
+}
+
+// Auto-load environment variables
+loadEnv(); 

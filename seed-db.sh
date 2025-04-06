@@ -10,3 +10,4 @@ echo -e "${GREEN}Seeding database...${NC}"
 
 # Seed database
 npx prisma db seed
+
