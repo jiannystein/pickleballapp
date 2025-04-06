@@ -128,17 +128,28 @@ To use Bash scripts:
    ```
    This script will check for Node.js and PostgreSQL, install them if needed, and create a template .env file.
 
-4. **Run the setup script**:
+4. **Copy environment configuration files**:
+   ```bash
+   # Copy the environment example file if not already done
+   cp .env.example .env
+   
+   # Create the required TypeScript configuration files
+   mkdir -p src/lib
+   cp src/lib/env.ts.example src/lib/env.ts
+   cp src/lib/init-admin.ts.example src/lib/init-admin.ts
+   ```
+
+5. **Run the setup script**:
    ```bash
    ./setup.sh
    ```
 
-5. **Start the development server**:
+6. **Start the development server**:
    ```bash
    ./start-dev.sh
    ```
 
-6. **Access the application** at [http://localhost:3000](http://localhost:3000)
+7. **Access the application** at [http://localhost:3000](http://localhost:3000)
 
 ### Default Admin Account
 
@@ -224,6 +235,21 @@ If you encounter warnings about casing in file paths, ensure your project folder
 If you see "Permission denied" when trying to run scripts:
 ```bash
 chmod +x *.sh  # Make all scripts executable
+```
+
+#### Missing Configuration Files
+
+If you encounter errors about missing files like `env.ts` or `init-admin.ts`:
+```bash
+# Create necessary directories
+mkdir -p src/lib
+
+# Copy example files
+cp src/lib/env.ts.example src/lib/env.ts
+cp src/lib/init-admin.ts.example src/lib/init-admin.ts
+
+# Restart the development server
+./start-dev.sh
 ```
 
 #### PostgreSQL Connection Issues
