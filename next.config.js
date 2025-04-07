@@ -21,8 +21,6 @@ const nextConfig = {
   },
   experimental: {
     serverActions: true,
-    optimizeCss: true,
-    turboCacheMode: 'dynamic',
   },
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {

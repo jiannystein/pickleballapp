@@ -68,6 +68,30 @@ export default function PlayerCard({
     return () => setMounted(false);
   }, []);
 
+  // Add a check to ensure portal element exists
+  useEffect(() => {
+    // Check if we're using portals and create a container if needed
+    if (portalId && typeof document !== 'undefined') {
+      let portalElement = document.getElementById(portalId);
+      
+      // If the portal container doesn't exist, create it
+      if (!portalElement) {
+        portalElement = document.createElement('div');
+        portalElement.id = portalId;
+        document.body.appendChild(portalElement);
+      }
+    }
+    
+    // Clean up any portals when component unmounts
+    return () => {
+      // Safely unmount - first check if we're in browser context
+      if (portalId && typeof document !== 'undefined') {
+        // Make sure all card elements are removed when component unmounts
+        setIsOpen(false);
+      }
+    };
+  }, [portalId]);
+
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
@@ -201,6 +225,7 @@ export default function PlayerCard({
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        ref={cardRef}
       >
         <div className="bg-gray-800/95 backdrop-blur-sm border border-gray-700/50 rounded-xl shadow-2xl p-5 animate-fade-in transition-all duration-200 ease-in-out">
           {loading && (
@@ -403,8 +428,15 @@ export default function PlayerCard({
 
     if (portalId && mounted) {
       const portalElement = document.getElementById(portalId);
+      // Only create portal if the target element exists
       if (portalElement) {
-        return createPortal(card, portalElement);
+        try {
+          return createPortal(card, portalElement);
+        } catch (error) {
+          console.error('Error creating portal:', error);
+          // Fallback to rendering inline if portal creation fails
+          return card;
+        }
       }
     }
 
