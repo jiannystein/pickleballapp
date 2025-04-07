@@ -55,7 +55,25 @@ export async function GET(
 
     // If result is an array, return the first item
     const session = Array.isArray(result) ? result[0] : result;
-    return NextResponse.json(session);
+    
+    // Create response with cache headers
+    const response = NextResponse.json(session);
+    
+    // If the session is in the past or completed, we can cache it longer
+    const sessionDate = new Date(session.date);
+    const now = new Date();
+    const isCompleted = session.status === 'completed';
+    const isPastSession = sessionDate < now;
+    
+    if (isCompleted || isPastSession) {
+      // Cache completed or past sessions for longer (1 hour)
+      response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    } else {
+      // For active sessions, use a shorter cache time (5 minutes)
+      response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300');
+    }
+    
+    return response;
   } catch (error) {
     console.error('Error retrieving session:', error);
     return NextResponse.json(

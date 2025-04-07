@@ -159,7 +159,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json(sessionsWithRequestCounts);
+    // Create a response with the data
+    const response = NextResponse.json(sessionsWithRequestCounts);
+    
+    // Add cache control headers - shorter cache time for sessions list
+    // because it changes more frequently
+    response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=120');
+    
+    return response;
   } catch (error) {
     console.error('Error fetching sessions:', error);
     return NextResponse.json(

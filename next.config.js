@@ -14,9 +14,24 @@ const nextConfig = {
         hostname: 'localhost',
       }
     ],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    formats: ['image/webp', 'image/avif'],
+    minimumCacheTTL: 60,
+  },
+  experimental: {
+    serverActions: true,
+    optimizeCss: true,
+    turboCacheMode: 'dynamic',
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
   },
   webpack: (config) => {
     config.resolve.symlinks = false;
+    config.cache = true;
     return config;
   },
 };

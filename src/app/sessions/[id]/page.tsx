@@ -115,11 +115,143 @@ export default function SessionDetail() {
   
   // Add a ref for the rate players section
   const ratePlayersRef = useRef<HTMLDivElement>(null);
+  
+  // Define memoized fetch functions first to avoid reference issues
+  const fetchSession = useCallback(async () => {
+    try {
+      const sessionId = params?.id;
+      
+      if (!sessionId) {
+        throw new Error('Session ID is required');
+      }
+
+      // Convert to string if it's an array
+      const id = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+      
+      setIsLoading(true);
+      // Use cache option to leverage browser cache
+      const res = await fetch(`/api/sessions/${id}`, {
+        cache: 'default' // Use cache but validate with server
+      });
+      
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('Session not found');
+        }
+        throw new Error('Failed to fetch session details');
+      }
+      
+      const data = await res.json();
+      setSession(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params?.id]);
+  
+  const fetchPendingReviews = useCallback(async () => {
+    if (!session?.id || !currentUserId) return;
+    
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/reviews?userId=${currentUserId}&pending=true`);
+      
+      if (!res.ok) {
+        console.error('Failed to fetch pending reviews:', res.status);
+        return;
+      }
+      
+      const data = await res.json();
+      setPendingReviews(data);
+      
+      // Also check if the user has rated any players
+      const hasRated = data.allReviewsComplete || 
+                       (data.pendingReviewsCount < session.players.length);
+      
+      setHasRatedAnyPlayers(hasRated);
+    } catch (err) {
+      console.error('Error fetching pending reviews:', err);
+    }
+  }, [session?.id, currentUserId, session?.players?.length]);
+
+  const fetchJoinRequests = useCallback(async () => {
+    if (!session?.id) return;
+    
+    try {
+      setLoadingRequests(true);
+      const res = await fetch(`/api/sessions/${session.id}/requests`);
+      
+      if (!res.ok) {
+        console.error('Failed to fetch join requests:', res.status);
+        return;
+      }
+      
+      const data = await res.json();
+      setJoinRequests(data);
+    } catch (err) {
+      console.error('Error fetching join requests:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [session?.id]);
+
+  const fetchUserJoinRequest = useCallback(async () => {
+    if (!session?.id || !currentUserId) return;
+    
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/requests/user`);
+      
+      if (!res.ok) {
+        console.error('Failed to fetch user join request:', res.status);
+        return;
+      }
+      
+      const data = await res.json();
+      if (data) {
+        setUserJoinRequest({
+          id: data.id,
+          status: data.status
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching user join request:', err);
+    }
+  }, [session?.id, currentUserId]);
+
+  const fetchSessionPhotos = useCallback(async () => {
+    if (!session?.id) return;
+    
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/photos`);
+      
+      if (!res.ok) {
+        console.error('Failed to fetch session photos:', res.status);
+        return;
+      }
+      
+      const data = await res.json();
+      setSessionPhotos(data);
+    } catch (err) {
+      console.error('Error fetching session photos:', err);
+    }
+  }, [session?.id]);
+
+  async function fetchCurrentUser() {
+    try {
+      const res = await fetch('/api/auth/me');
+      const data = await res.json();
+      if (res.ok) {
+        setCurrentUserId(data.userId);
+      }
+    } catch (err) {
+      console.error('Error fetching user:', err);
+    }
+  }
 
   useEffect(() => {
     fetchCurrentUser();
     fetchSession();
-  }, []);
+  }, [fetchSession]);
 
   // Add useEffect for checking location hash
   useEffect(() => {
@@ -172,7 +304,7 @@ export default function SessionDetail() {
       console.log('Session completed, fetching pending reviews');
       fetchPendingReviews();
     }
-  }, [session, currentUserId]);
+  }, [session, currentUserId, fetchPendingReviews]);
 
   useEffect(() => {
     if (session && currentUserId) {
@@ -182,6 +314,7 @@ export default function SessionDetail() {
         // Set up an interval to periodically check for pending requests for hosts
         const intervalId = setInterval(() => {
           console.log('Periodic check for pending requests');
+          fetchJoinRequests();
         }, 15000); // Check every 15 seconds
         
         return () => clearInterval(intervalId);
@@ -189,13 +322,13 @@ export default function SessionDetail() {
         fetchUserJoinRequest();
       }
     }
-  }, [session, currentUserId]);
+  }, [session, currentUserId, fetchJoinRequests, fetchUserJoinRequest]);
 
   useEffect(() => {
     if (session) {
       fetchSessionPhotos();
     }
-  }, [session]);
+  }, [session, fetchSessionPhotos]);
 
   useEffect(() => {
     // Filter pending requests
@@ -203,47 +336,6 @@ export default function SessionDetail() {
       setPendingRequests(joinRequests.filter(req => req.status === 'pending'));
     }
   }, [joinRequests]);
-
-  async function fetchCurrentUser() {
-    try {
-      const res = await fetch('/api/auth/me');
-      const data = await res.json();
-      if (res.ok) {
-        setCurrentUserId(data.userId);
-      }
-    } catch (err) {
-      console.error('Error fetching user:', err);
-    }
-  }
-
-  async function fetchSession() {
-    try {
-      const sessionId = params?.id;
-      
-      if (!sessionId) {
-        throw new Error('Session ID is required');
-      }
-
-      // Convert to string if it's an array
-      const id = Array.isArray(sessionId) ? sessionId[0] : sessionId;
-      
-      const res = await fetch(`/api/sessions/${id}`);
-      
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error('Session not found');
-        }
-        throw new Error('Failed to fetch session details');
-      }
-      
-      const data = await res.json();
-      setSession(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   // Function to mark a session as completed
   async function markSessionAsCompleted() {
@@ -305,49 +397,6 @@ export default function SessionDetail() {
     
     checkSessionStatus();
   }, [session, isLoading, markSessionAsCompleted]);
-
-  async function fetchJoinRequests() {
-    if (!session) return;
-    
-    try {
-      setLoadingRequests(true);
-      console.log('Fetching join requests for session:', session.id);
-      const res = await fetch(`/api/sessions/${session.id}/requests`);
-      
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Join requests found:', data.length, data);
-        setJoinRequests(data);
-      } else {
-        console.error('Error fetching join requests:', res.status, res.statusText);
-      }
-    } catch (err) {
-      console.error('Failed to fetch join requests:', err);
-    } finally {
-      setLoadingRequests(false);
-    }
-  }
-
-  async function fetchUserJoinRequest() {
-    if (!session || !currentUserId) return;
-    
-    try {
-      console.log('Fetching user join request for session:', session.id);
-      const res = await fetch(`/api/sessions/${session.id}/requests/user`);
-      
-      if (res.ok) {
-        const data = await res.json();
-        console.log('User join request data:', data);
-        if (data) {
-          setUserJoinRequest(data);
-        }
-      } else {
-        console.error('Failed to fetch user join request:', res.status);
-      }
-    } catch (err) {
-      console.error('Error fetching user join request:', err);
-    }
-  }
 
   async function handleJoinSession() {
     if (!session) return;
@@ -571,23 +620,6 @@ export default function SessionDetail() {
   const openRatePlayersModal = () => {
     setIsRatePlayersModalOpen(true);
   };
-
-  // Fetch session photos
-  const fetchSessionPhotos = useCallback(async () => {
-    if (!session) return;
-    
-    try {
-      const response = await fetch(`/api/sessions/${session.id}/photos`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch session photos');
-      }
-      
-      const data = await response.json();
-      setSessionPhotos(data);
-    } catch (error) {
-      console.error('Error fetching session photos:', error);
-    }
-  }, [session]);
 
   // Function to handle opening the photo modal
   const openPhotoModal = (photo: { id: string; photoUrl: string; caption?: string; uploadedBy?: any }) => {
@@ -881,34 +913,6 @@ export default function SessionDetail() {
   useEffect(() => {
     checkUserRatings();
   }, [checkUserRatings]);
-
-  // Add new function to fetch pending reviews
-  const fetchPendingReviews = async () => {
-    if (!session?.id || !currentUserId) return;
-    
-    try {
-      console.log('Fetching pending reviews for session:', session.id, 'User:', currentUserId);
-      const response = await fetch(`/api/sessions/${session.id}/reviews?userId=${currentUserId}`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Pending reviews response data:', data);
-        setPendingReviews({
-          pendingReviewsCount: data.pendingReviews.length,
-          pendingReviewPlayers: data.pendingReviews,
-          allReviewsComplete: data.allReviewsComplete
-        });
-        console.log('Updated pendingReviews state:', {
-          pendingReviewsCount: data.pendingReviews.length, 
-          playerCount: data.pendingReviews.length,
-          complete: data.allReviewsComplete
-        });
-      } else {
-        console.error('Error fetching pending reviews, status:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching pending reviews:', error);
-    }
-  };
 
   // Inside SessionDetail component, add this near line 1477, just after renderSessionInfo()
   // Function to get the pending review IDs for display

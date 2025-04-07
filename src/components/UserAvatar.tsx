@@ -14,6 +14,7 @@ interface UserAvatarProps {
   playerCardPosition?: 'top' | 'bottom' | 'left' | 'right';
   playerCardTrigger?: 'hover' | 'click';
   portalId?: string;
+  priority?: boolean; // Add priority prop to manually control image loading priority
 }
 
 function UserAvatar({ 
@@ -24,7 +25,8 @@ function UserAvatar({
   showPlayerCard = false,
   playerCardPosition = 'bottom',
   playerCardTrigger = 'hover',
-  portalId
+  portalId,
+  priority = false // Default to false
 }: UserAvatarProps) {
   const [error, setError] = useState(false);
   const [imageVersion, setImageVersion] = useState(() => Date.now());
@@ -90,8 +92,10 @@ function UserAvatar({
             console.error('UserAvatar: Image failed to load:', imageSrc);
             setError(true);
           }}
-          priority
-          unoptimized
+          priority={priority} // Only use priority for important avatars (like current user)
+          loading={priority ? "eager" : "lazy"} // Use lazy loading for non-priority avatars
+          sizes={`${size}px`} // Inform the browser about the display size
+          quality={80} // Slightly reduce quality for better performance
         />
       </div>
     );
@@ -122,5 +126,6 @@ export default memo(UserAvatar, (prevProps, nextProps) => {
          prevProps.imageUrl === nextProps.imageUrl &&
          prevProps.size === nextProps.size &&
          prevProps.userId === nextProps.userId &&
-         prevProps.showPlayerCard === nextProps.showPlayerCard;
+         prevProps.showPlayerCard === nextProps.showPlayerCard &&
+         prevProps.priority === nextProps.priority;
 }); 
