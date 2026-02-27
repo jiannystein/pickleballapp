@@ -22,8 +22,7 @@ async function main() {
       name: 'Admin User',
       password: hashedPassword,
       role: 'ADMIN',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      isAdmin: true
     }
   });
 

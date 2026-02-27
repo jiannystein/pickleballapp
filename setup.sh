@@ -1,78 +1,80 @@
 #!/bin/bash
-# PickleBall App Setup for Ubuntu
+# PickleBall App Setup for Ubuntu/macOS
+
+# Change to script directory
+cd "$(dirname "$0")"
 
 # Set colors
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}Setting up PickleBall App...${NC}"
 
 # Check if .env file exists
 if [ ! -f .env ]; then
-    echo "ERROR: .env file not found."
+    echo -e "${RED}ERROR: .env file not found.${NC}"
     echo "Please create a .env file based on .env.example"
     exit 1
 fi
 
-echo "Setting up your PickleBall development environment..."
-
 # Install dependencies
-echo -e "${CYAN}Installing dependencies...${NC}"
+echo -e "${CYAN}[1/6] Installing dependencies...${NC}"
 npm install
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install dependencies."
+    echo -e "${RED}ERROR: Failed to install dependencies.${NC}"
     exit 1
 fi
 
 # Generate Prisma client
-echo -e "${CYAN}Generating Prisma client...${NC}"
+echo -e "${CYAN}[2/6] Generating Prisma client...${NC}"
 npx prisma generate
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to generate Prisma client."
+    echo -e "${RED}ERROR: Failed to generate Prisma client.${NC}"
+    exit 1
+fi
+
+# Create database if it doesn't exist
+echo -e "${CYAN}[3/6] Creating database (if needed)...${NC}"
+node create-db.js
+if [ $? -ne 0 ]; then
+    echo -e "${RED}ERROR: Failed to create database.${NC}"
+    echo "Make sure PostgreSQL is running and your DATABASE_URL in .env is correct."
     exit 1
 fi
 
 # Push schema to database
-echo -e "${CYAN}Pushing schema to database...${NC}"
+echo -e "${CYAN}[4/6] Pushing schema to database...${NC}"
 npx prisma db push
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to push database schema."
-    echo "Make sure your DATABASE_URL in .env is correct and the database is accessible."
+    echo -e "${RED}ERROR: Failed to push database schema.${NC}"
     exit 1
 fi
 
 # Seed the database
-echo -e "${CYAN}Seeding database...${NC}"
+echo -e "${CYAN}[5/6] Seeding database...${NC}"
 npx prisma db seed
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to seed the database."
+    echo -e "${RED}ERROR: Failed to seed the database.${NC}"
     exit 1
 fi
 
 # Initialize reviews
-echo -e "${CYAN}Initializing reviews...${NC}"
+echo -e "${CYAN}[6/6] Initializing reviews...${NC}"
 node src/scripts/initialize-reviews.js
 
-# Create start script
-echo -e "${CYAN}Creating development starter script...${NC}"
-cat > start-dev.sh << 'EOL'
-#!/bin/bash
-echo "Starting PickleBall App development server..."
-npm run dev
-EOL
-
-# Make the start script executable
-chmod +x start-dev.sh
-
-echo -e "${GREEN}Setup complete! You can now run ./start-dev.sh to start the development server.${NC}"
+echo
+echo -e "${GREEN}Setup complete!${NC}"
 echo
 echo "Default admin credentials:"
-echo "Email: admin@example.com"
-echo "Password: admin123"
+echo "  Email: admin@example.com"
+echo "  Password: admin123"
 echo
-echo "IMPORTANT: Please change the admin password immediately after first login!"
+echo -e "${YELLOW}IMPORTANT: Change the admin password immediately after first login!${NC}"
 echo
-echo "To manually start the server:"
-echo "  npm run dev"
-echo "===================================================" 
+echo "To start the development server, run:"
+echo "  ./start-dev.sh"
+echo "  OR"
+echo "  pm2 start ecosystem.config.js"

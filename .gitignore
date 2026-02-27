@@ -37,19 +37,17 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# custom
-/public/uploads
+# user uploads (but keep default logos and screenshots)
+/public/uploads/*
+!/public/uploads/logo/
+!/public/uploads/screenshots/
 
 # database
 *.sqlite
 *.sqlite3
 *.db
 
-# utility scripts with sensitive info
-reset-db.bat
-updateAdminFlag.js
-createAdminUser.js
-*-db.bat
+# generated batch scripts
 start-dev.bat
 
 # logs
@@ -57,4 +55,10 @@ start-dev.bat
 
 # sensitive files
 src/lib/env.ts
-src/lib/init-admin.ts 
+src/lib/init-admin.ts
+
+# claude code
+.claude/
+
+# misc generated files
+nul 

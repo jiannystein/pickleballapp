@@ -26,8 +26,8 @@ const DEFAULT_CONFIG = {
   email: 'contact@pickleball.com',
   copyright: `© ${new Date().getFullYear()} PickleBall. All rights reserved.`,
   primaryColor: '#6366f1', // indigo
-  logo: '/logo.png',
-  favicon: '/favicon.ico',
+  logo: '/uploads/logo/default-logo.png',
+  favicon: '/uploads/logo/default-favicon.ico',
   
   // About page content
   aboutTitle: 'About PickleBall App',

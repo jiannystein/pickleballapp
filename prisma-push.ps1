@@ -1,4 +1,4 @@
 # PickleBall App Prisma Schema Push
-Set-Location "C:\Users\J\Documents\GitHub\pickleballapp"
+Set-Location $PSScriptRoot
 Write-Host "Pushing Prisma schema to database..." -ForegroundColor Green
-npx prisma db push 
+npx prisma db push

@@ -11,8 +11,8 @@ export async function POST() {
     }
 
     // Default values for logo and favicon
-    const defaultLogo = '/logo.png';
-    const defaultFavicon = '/favicon.ico';
+    const defaultLogo = '/uploads/logo/default-logo.png';
+    const defaultFavicon = '/uploads/logo/default-favicon.ico';
 
     // Reset logo
     const existingLogoEntry = await prisma.$queryRaw<any[]>`

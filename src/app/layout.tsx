@@ -2,6 +2,7 @@ import '../lib/env'; // Import environment loader
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import Script from 'next/script';
 import { NextAuthProvider } from '@/providers/NextAuthProvider';
 import { ToastProvider } from '@/providers/ToastProvider';
 import InitializeServer from '@/components/InitializeServer';
@@ -46,15 +47,15 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <head>
-        {/* Script to suppress Chrome's message port errors globally */}
+        {/* Script to suppress Chrome's message port errors globally and load Figma capture */}
         <script dangerouslySetInnerHTML={{
           __html: `
             // Suppress console errors about message port closing
             const originalConsoleError = console.error;
             console.error = function(...args) {
-              if (args.length > 0 && 
+              if (args.length > 0 &&
                   (typeof args[0] === 'string' && args[0].includes('message port closed') ||
-                   args[0] && args[0].message && typeof args[0].message === 'string' && 
+                   args[0] && args[0].message && typeof args[0].message === 'string' &&
                    args[0].message.includes('message port closed'))) {
                 return;
               }
@@ -63,19 +64,26 @@ export default function RootLayout({
 
             // Handle unhandled promise rejections that might cause the message port errors
             window.addEventListener('unhandledrejection', function(event) {
-              if (event && event.reason && 
-                  typeof event.reason.message === 'string' && 
+              if (event && event.reason &&
+                  typeof event.reason.message === 'string' &&
                   event.reason.message.includes('message port closed')) {
                 event.preventDefault();
                 event.stopPropagation();
               }
             });
+
+            // Load Figma capture script immediately from head
+            (function() {
+              var s = document.createElement('script');
+              s.src = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
+              document.head.appendChild(s);
+            })();
           `
         }} />
       </head>
-      <SiteFavicon />
       <body className={`${inter.className} h-full bg-gray-900 text-gray-100`}>
         <NextAuthProvider>
+          <SiteFavicon />
           <InitializeServer />
           <HydrationFix />
           <ToastProvider />
@@ -87,7 +95,7 @@ export default function RootLayout({
           
           {/* Portal container for player cards */}
           <div id="player-card-portal" />
-          
+
           {/* We don't need to add NotificationIcon here as it's already included in the Navigation component */}
         </NextAuthProvider>
       </body>

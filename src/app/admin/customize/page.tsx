@@ -43,7 +43,7 @@ export default function CustomizeSite() {
     email: '',
     copyright: `© ${new Date().getFullYear()} PickleBall. All rights reserved.`,
     primaryColor: '#6366f1',
-    logo: '/logo.png'
+    logo: '/uploads/logo/default-logo.png'
   });
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
@@ -317,7 +317,7 @@ export default function CustomizeSite() {
                     <button
                       type="button"
                       onClick={handleResetLogo}
-                      disabled={resettingLogo || config.logo === '/logo.png'}
+                      disabled={resettingLogo || config.logo === '/uploads/logo/default-logo.png'}
                       className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {resettingLogo ? 'Resetting...' : 'Reset to Default'}
