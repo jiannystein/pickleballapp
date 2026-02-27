@@ -60,5 +60,11 @@ src/lib/init-admin.ts
 # claude code
 .claude/
 
+# playwright mcp
+.playwright-mcp/
+
+# pm2 runtime data
+.pm2/
+
 # misc generated files
 nul 
