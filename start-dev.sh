@@ -11,4 +11,4 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Starting PickleBall App development server...${NC}"
 
 # Start the development server (.env is loaded by Next.js automatically)
-npx next dev
+node node_modules/next/dist/bin/next dev
