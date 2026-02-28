@@ -25,6 +25,24 @@ A modern web application for connecting pickleball enthusiasts, managing session
 ### Login
 ![Login](public/uploads/screenshots/login.png)
 
+### Admin Users
+![Admin Users](public/uploads/screenshots/admin-users.png)
+
+### Admin Locations
+![Admin Locations](public/uploads/screenshots/admin-locations.png)
+
+### Admin Activities
+![Admin Activities](public/uploads/screenshots/admin-activities.png)
+
+### Admin Announcements
+![Admin Announcements](public/uploads/screenshots/admin-announcements.png)
+
+### Admin Bug Reports
+![Admin Bug Reports](public/uploads/screenshots/admin-bug-reports.png)
+
+### Admin Customize
+![Admin Customize](public/uploads/screenshots/admin-customize.png)
+
 ## Features
 
 - Create and join pickleball sessions
